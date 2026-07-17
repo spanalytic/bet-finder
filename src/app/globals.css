@@ -1,0 +1,89 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.65rem;
+  --background: oklch(0.13 0.012 250);
+  --foreground: oklch(0.96 0.008 250);
+  --card: oklch(0.17 0.014 250);
+  --card-foreground: oklch(0.96 0.008 250);
+  --popover: oklch(0.18 0.016 250);
+  --popover-foreground: oklch(0.96 0.008 250);
+  --primary: oklch(0.76 0.17 155);
+  --primary-foreground: oklch(0.14 0.025 155);
+  --secondary: oklch(0.22 0.018 250);
+  --secondary-foreground: oklch(0.93 0.008 250);
+  --muted: oklch(0.21 0.014 250);
+  --muted-foreground: oklch(0.68 0.016 250);
+  --accent: oklch(0.24 0.024 250);
+  --accent-foreground: oklch(0.96 0.008 250);
+  --destructive: oklch(0.64 0.21 25);
+  --border: oklch(0.28 0.018 250);
+  --input: oklch(0.28 0.018 250);
+  --ring: oklch(0.76 0.17 155);
+  --chart-1: oklch(0.76 0.17 155);
+  --chart-2: oklch(0.68 0.15 220);
+  --chart-3: oklch(0.72 0.15 75);
+  --chart-4: oklch(0.65 0.18 300);
+  --chart-5: oklch(0.7 0.18 25);
+}
+
+@theme inline {
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-xs: calc(var(--radius) * 0.5);
+  --radius-sm: calc(var(--radius) * 0.75);
+  --radius-md: calc(var(--radius) * 0.875);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  background:
+    radial-gradient(circle at 15% -20%, oklch(0.32 0.07 180 / 0.2), transparent 28rem),
+    var(--background);
+  color: var(--foreground);
+  font-family: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+}
+
+::selection {
+  background: oklch(0.76 0.17 155 / 0.28);
+}
+
+.metric-number {
+  font-family: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}

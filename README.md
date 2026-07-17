@@ -36,7 +36,11 @@ npm start
 C:\Users\thoma\PyCharmMiscProject\.venv\Scripts\python.exe pipeline\build_index.py
 ```
 
-The website reads `data/backtest-index.json` and does not access `PyCharmMiscProject` at runtime. See `pipeline/README.md` for the current migration boundary.
+The website reads `data/backtest-index.json` and does not access `PyCharmMiscProject` at runtime. See `pipeline/README.md` for the current migration boundary. After rebuilding, commit the updated `data/backtest-index.json` and push to redeploy the live site.
+
+## Deployment (GitHub Pages)
+
+The site is a fully static export (`output: "export"`): the browser downloads `backtest-index.json` once and runs every backtest locally, so no server is needed. `.github/workflows/deploy.yml` builds and publishes to GitHub Pages on every push to `main`. In the repository settings, set **Pages → Source → GitHub Actions** once.
 
 ## Verification
 

@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "copy-index": "node -e \"require('fs').copyFileSync('data/backtest-index.json','public/backtest-index.json')\"",
+    "predev": "npm run copy-index",
+    "prebuild": "npm run copy-index",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

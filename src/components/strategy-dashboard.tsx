@@ -36,7 +36,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { runBacktest } from "@/lib/backtest-engine";
 import type {
+  BacktestIndex,
   BacktestQuery,
   BacktestResponse,
   FilterDefinition,
@@ -136,6 +138,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
   const [filterSearch, setFilterSearch] = useState("");
   const [openCategories, setOpenCategories] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [index, setIndex] = useState<BacktestIndex | null>(null);
   const [result, setResult] = useState<BacktestResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -196,9 +199,31 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     );
   }, [filterGroups, hydrated, market, minBets, selectedLeagues, selectedSeasons]);
 
+  // Load the match index once; the whole backtest runs in the browser so the
+  // deployed site needs nothing but static files.
   useEffect(() => {
+    if (index) return;
     const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
+    (async () => {
+      setError(null);
+      try {
+        const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+        const response = await fetch(`${base}/backtest-index.json`, { signal: controller.signal });
+        if (!response.ok) throw new Error("The match index could not be loaded.");
+        setIndex((await response.json()) as BacktestIndex);
+      } catch (requestError) {
+        if (requestError instanceof DOMException && requestError.name === "AbortError") return;
+        setError(requestError instanceof Error ? requestError.message : "The match index could not be loaded.");
+        setLoading(false);
+      }
+    })();
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryToken]);
+
+  useEffect(() => {
+    if (!index) return;
+    const timer = window.setTimeout(() => {
       setLoading(true);
       setError(null);
       const query: BacktestQuery = {
@@ -209,27 +234,16 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
         minBets,
       };
       try {
-        const response = await fetch("/api/backtest", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(query),
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error("The local query service returned an error.");
-        setResult((await response.json()) as BacktestResponse);
-      } catch (requestError) {
-        if (requestError instanceof DOMException && requestError.name === "AbortError") return;
-        setError(requestError instanceof Error ? requestError.message : "The backtest could not be calculated.");
+        setResult(runBacktest(index, query));
+      } catch {
+        setError("The backtest could not be calculated.");
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        setLoading(false);
       }
-    }, 180);
+    }, 120);
 
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [filterGroups, market, minBets, retryToken, selectedLeagues, selectedSeasons]);
+    return () => window.clearTimeout(timer);
+  }, [filterGroups, index, market, minBets, retryToken, selectedLeagues, selectedSeasons]);
 
   const filteredCategories = useMemo(() => {
     const search = filterSearch.trim().toLocaleLowerCase();

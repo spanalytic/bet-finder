@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# generated copy of data/backtest-index.json (created by npm run copy-index)
+/public/backtest-index.json
+
 # production
 /build
 

@@ -27,10 +27,28 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
-      - run: npm ci
-      - run: npm run build
+      - name: Install dependencies
+        run: |
+          if ! npm ci > /tmp/npm-ci.log 2>&1; then
+            cat /tmp/npm-ci.log
+            grep -iE "err" /tmp/npm-ci.log | head -15 | while IFS= read -r line; do echo "::error::npm ci: $line"; done
+            echo "npm ci failed — retrying with npm install"
+            if ! npm install --no-audit --no-fund > /tmp/npm-install.log 2>&1; then
+              cat /tmp/npm-install.log
+              grep -iE "err" /tmp/npm-install.log | head -15 | while IFS= read -r line; do echo "::error::npm install: $line"; done
+              exit 1
+            fi
+          fi
+      - name: Build
         env:
           NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: |
+          if ! npm run build > /tmp/build.log 2>&1; then
+            cat /tmp/build.log
+            grep -iE "error|failed" /tmp/build.log | head -20 | while IFS= read -r line; do echo "::error::build: $line"; done
+            exit 1
+          fi
+          tail -20 /tmp/build.log
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out

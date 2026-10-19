@@ -8,7 +8,7 @@ Live website: [Bet Finder](https://spanalytic.github.io/bet-finder/).
 
 - Top-five leagues: EPL, Bundesliga, Ligue 1, La Liga and Serie A.
 - 125 fixed filters across 16 categories.
-- AND + OR rule builder with a five-filter cap: groups combine with AND, filters inside a group combine with OR.
+- Filters combine with AND by default, with a five-filter cap. Use Add OR on a group to add one alternative; subsequent selections return to AND. Saved strategies retain their existing group rules.
 - Home, draw, away, Over 2.5 and Under 2.5 markets.
 - Maximum closing odds, one-unit flat staking and no commission.
 - ROI, profit, strike rate, average odds, maximum drawdown and 95% confidence intervals.

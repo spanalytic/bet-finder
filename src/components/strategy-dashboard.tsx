@@ -133,7 +133,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
   const [selectedLeagues, setSelectedLeagues] = useState<string[]>(allLeagues);
   const [selectedSeasons, setSelectedSeasons] = useState<string[]>(meta.defaultSeasons);
   const [filterGroups, setFilterGroups] = useState<string[][]>([]);
-  const [activeGroup, setActiveGroup] = useState(0);
+  const [orTargetGroup, setOrTargetGroup] = useState<number | null>(null);
   const [minBets, setMinBets] = useState(100);
   const [filterSearch, setFilterSearch] = useState("");
   const [openCategories, setOpenCategories] = useState<string[]>([]);
@@ -154,7 +154,6 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
 
   const flatFilters = useMemo(() => filterGroups.flat(), [filterGroups]);
   const capReached = flatFilters.length >= meta.maxFilters;
-  const currentActiveGroup = Math.min(activeGroup, Math.max(filterGroups.length - 1, 0));
 
   // Restore the saved strategy list and the in-progress setup from the last visit.
   useEffect(() => {
@@ -281,21 +280,20 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
           .filter((group) => group.length > 0);
       }
       if (current.flat().length >= meta.maxFilters) return current;
-      if (!current.length) return [[filterId]];
-      const target = Math.min(currentActiveGroup, current.length - 1);
-      return current.map((group, index) => (index === target ? [...group, filterId] : group));
+      if (orTargetGroup !== null && current[orTargetGroup]) {
+        return current.map((group, index) =>
+          index === orTargetGroup ? [...group, filterId] : group,
+        );
+      }
+      return [...current, [filterId]];
     });
-  }
-
-  function addAndGroup() {
-    const trailingEmpty = filterGroups.length > 0 && filterGroups[filterGroups.length - 1].length === 0;
-    if (!trailingEmpty) setFilterGroups([...filterGroups, []]);
-    setActiveGroup(trailingEmpty ? filterGroups.length - 1 : filterGroups.length);
+    // An OR alternative is one explicit addition; subsequent filters use AND.
+    setOrTargetGroup(null);
   }
 
   function removeGroup(index: number) {
     setFilterGroups((current) => current.filter((_, i) => i !== index));
-    setActiveGroup(0);
+    setOrTargetGroup(null);
   }
 
   function toggleRequiredSelection(
@@ -315,7 +313,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     setSelectedLeagues(allLeagues);
     setSelectedSeasons(meta.defaultSeasons);
     setFilterGroups([]);
-    setActiveGroup(0);
+    setOrTargetGroup(null);
     setMinBets(100);
     setFilterSearch("");
     setOpenCategories([]);
@@ -347,7 +345,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     setSelectedLeagues(strategy.leagues);
     setSelectedSeasons(strategy.seasons);
     setFilterGroups(sanitizeGroups(strategy.filterGroups, validFilterIds, meta.maxFilters));
-    setActiveGroup(0);
+    setOrTargetGroup(null);
     setMinBets(strategy.minBets);
     setStrategiesDialogOpen(false);
   }
@@ -529,7 +527,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                         className="h-auto px-1.5 py-0.5 text-[11px]"
                         onClick={() => {
                           setFilterGroups([]);
-                          setActiveGroup(0);
+                          setOrTargetGroup(null);
                         }}
                         size="sm"
                         variant="ghost"
@@ -543,14 +541,14 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                   </div>
                 </div>
                 <CardDescription className="text-xs leading-5">
-                  Start with one or two signals. Add up to five.
+                  Filters use AND by default. Start with one or two signals; add up to five.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pt-4 pb-5">
                 {filterGroups.length > 0 && (
                   <div className="space-y-2">
                     {filterGroups.map((group, index) => {
-                      const isActive = index === currentActiveGroup;
+                      const isActive = index === orTargetGroup;
                       return (
                         <div key={index}>
                           {index > 0 && (
@@ -567,16 +565,21 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                             )}
                           >
                             <div className="mb-2 flex items-center justify-between gap-2">
-                              <button
-                                aria-label={`Add filters to group ${index + 1}`}
+                              <span className="flex-1 text-[11px] font-medium text-muted-foreground">
+                                Group {index + 1} <span className="font-normal">· {group.length > 1 ? "match any" : "required"}</span>
+                              </span>
+                              <Button
+                                aria-label={`Add OR alternative to group ${index + 1}`}
                                 aria-pressed={isActive}
-                                className="flex flex-1 items-center justify-between gap-2 rounded-sm text-left text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                                onClick={() => setActiveGroup(index)}
+                                className="h-6 gap-1 px-1.5 text-[10px] text-muted-foreground"
+                                disabled={capReached}
+                                onClick={() => setOrTargetGroup(isActive ? null : index)}
+                                size="xs"
                                 type="button"
+                                variant={isActive ? "secondary" : "ghost"}
                               >
-                                <span>Group {index + 1} <span className="font-normal">· match any</span></span>
-                                {isActive && <span className="text-[10px] font-normal text-primary">Adding here</span>}
-                              </button>
+                                <Plus className="size-3" /> Add OR
+                              </Button>
                               <Button
                                 aria-label={`Remove group ${index + 1}`}
                                 className="-mr-1 size-6 rounded-md p-0 hover:bg-foreground/10"
@@ -591,11 +594,6 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                               </Button>
                             </div>
                             <div className="flex flex-wrap items-center gap-1.5">
-                              {group.length === 0 && (
-                                <span className="text-[11px] text-muted-foreground">
-                                  Tick filters below to add them here.
-                                </span>
-                              )}
                               {group.map((id, filterIndex) => (
                                 <span className="flex items-center gap-1.5" key={id}>
                                   {filterIndex > 0 && (
@@ -626,16 +624,20 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                   </div>
                 )}
 
-                {filterGroups.length > 0 && (
-                <Button
-                  className="w-full border-dashed bg-transparent text-xs text-muted-foreground"
-                  disabled={capReached}
-                  onClick={addAndGroup}
-                  size="sm"
-                  variant="outline"
-                >
-                  <Plus data-icon="inline-start" /> Add AND group
-                </Button>
+                {orTargetGroup !== null && (
+                  <div className="flex items-start justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3" role="status">
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      Choose one filter below as an <span className="font-medium text-foreground">OR alternative to group {orTargetGroup + 1}</span>. After that, new filters use AND again.
+                    </p>
+                    <Button
+                      className="shrink-0"
+                      onClick={() => setOrTargetGroup(null)}
+                      size="xs"
+                      variant="ghost"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 )}
 
                 {ruleSummary && (
@@ -646,7 +648,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
 
                 <details className="group text-[11px] text-muted-foreground">
                   <summary className="flex cursor-pointer list-none items-center gap-1.5 hover:text-foreground"><Info className="size-3.5" /> How do groups work? <ChevronDown className="ml-auto size-3 group-open:rotate-180" /></summary>
-                  <p className="mt-2 leading-5">A match must pass every group (AND). Within a group, any one filter can match (OR). Select a group heading to add filters to it.</p>
+                  <p className="mt-2 leading-5">Each new filter creates a required AND group. To allow an alternative, choose Add OR on a group, then select one filter. A match must pass every group; any filter inside an OR group can match.</p>
                 </details>
 
                 {capReached && (

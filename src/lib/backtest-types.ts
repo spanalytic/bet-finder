@@ -7,10 +7,19 @@ export interface FilterDefinition {
   category: string;
   requiresJson: boolean;
   matches: number;
+  rawMatches?: number;
+}
+
+export interface RetiredFilter extends FilterDefinition {
+  reason: string;
 }
 
 export interface IndexMeta {
   schemaVersion?: number;
+  firstSeason: string;
+  minFilterMatches: number;
+  candidateFilterCount: number;
+  removedFilters: RetiredFilter[];
   generatedAt: string;
   cutoffDate: string;
   firstMatchDate: string;
@@ -36,6 +45,7 @@ export interface CompetitionCoverage {
   calendarYear: boolean;
   matches: number;
   eventMatches: number;
+  featureCounts: Record<string, number>;
   markets: Record<MarketId, number>;
   betfairMarkets: Record<MarketId, number>;
   marketLastDates: Record<MarketId, string | null>;

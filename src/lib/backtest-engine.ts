@@ -135,6 +135,9 @@ export function runBacktest(
   const selectedLeagues = new Set(query.leagues);
   const selectedSeasons = new Set(query.seasons);
   const filtersById = new Map(index.filters.map((filter) => [filter.id, filter]));
+  if ([...selectedFilters].some((id) => !filtersById.has(id))) {
+    throw new Error("This strategy contains an unavailable filter and needs review.");
+  }
   const ordinals = new Map(index.filters.map((filter, ordinal) => [filter.id, ordinal]));
   const encodedGroups = groups.map((group) => group.map((id) =>
     index.meta.schemaVersion === 2 ? (ordinals.get(id) ?? -1) : id,

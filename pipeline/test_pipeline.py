@@ -1,9 +1,23 @@
 import unittest
 
 from source_data import csv_match, last_prematch_price, merge_sources, regulation_score, season_key
+from filter_quality import prune_filters, restrict_seasons
 
 
 class SourceTests(unittest.TestCase):
+    def test_no_seasons_before_2022_2023(self):
+        self.assertEqual(restrict_seasons([{"season": "2021-2022"}, {"season": "2022-2023"}, {"season": "2026-2027"}]), [{"season": "2022-2023"}, {"season": "2026-2027"}])
+
+    def test_filter_gate_counts_matches_not_markets_and_remaps_ordinals(self):
+        records = [{"odds": {"home": 2, "away": 3}, "filterHits": [0, 2]} for _ in range(100)]
+        records += [{"odds": {"home": 2}, "filterHits": [1]} for _ in range(99)]
+        records += [{"odds": {"home": None}, "filterHits": [1]}]
+        active, removed = prune_filters(records, [{"id": "keep-a"}, {"id": "rare"}, {"id": "keep-b"}])
+        self.assertEqual([f["id"] for f in active], ["keep-a", "keep-b"])
+        self.assertEqual(removed[0]["matches"], 99)
+        self.assertEqual(records[0]["filterHits"], [0, 1])
+        self.assertEqual(records[-1]["filterHits"], [])
+
     def test_cutoff_is_inclusive_and_completed_only(self):
         row = {"Date": "01/10/2026", "HomeTeam": "Home", "AwayTeam": "Away", "FTHG": "2", "FTAG": "1", "FTR": "H", "MaxCH": "2.1"}
         self.assertIsNotNone(csv_match(row, "E0", "2026-2027", "test", "2026-10-01"))

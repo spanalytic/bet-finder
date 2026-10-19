@@ -20,6 +20,7 @@ from typing import Any
 
 from competitions import COMPETITIONS, UEFA_CODES
 from source_data import load_csv_matches, load_events, merge_sources
+from filter_quality import FIRST_SEASON, MIN_FILTER_MATCHES, feature_availability, prune_filters, restrict_seasons
 
 
 CURRENT_SEASON = "2026-2027"
@@ -120,9 +121,9 @@ def build() -> None:
     from scripts.add_ou25_odds import TEAM_NAME_MAP
 
     print(f"Step 1/7: loading all covered domestic/UEFA CSVs through {cutoff}", flush=True)
-    csv_rows = load_csv_matches(source_root, cache, cutoff)
+    csv_rows = restrict_seasons(load_csv_matches(source_root, cache, cutoff))
     print("Step 2/7: loading completed match events (read-only)", flush=True)
-    events = load_events(source_root, cutoff, screener, cache)
+    events = restrict_seasons(load_events(source_root, cutoff, screener, cache))
     aliases = dict(TEAM_NAME_MAP)
     for mapping in SOFASCORE_TEAM_NAMES.values():
         if isinstance(mapping, dict):
@@ -150,15 +151,17 @@ def build() -> None:
     elo_events = [{**match, "home_team_id": match["_home_identity"], "away_team_id": match["_away_identity"]} for match in events]
     add_internal_elo_features_from_event_matches(matches, elo_events)
 
-    print("Step 6/7: evaluating the 125 atomic filters once per match")
+    print("Step 6/7: evaluating candidate filters and auditing input coverage")
     source_filters = screener.get_filters()
     filter_ids = json.loads((Path(__file__).parent / "filter_ids.json").read_text(encoding="utf-8"))
     all_filters = {name: source_filters[name] for name in filter_ids}
     source_categories = extract_categories(source_root / "analysis" / "prematch_strategy_screener.py")
     hit_counts: Counter[str] = Counter()
     records: list[dict[str, Any]] = []
+    feature_counts = {code: Counter() for code in COMPETITIONS}
 
     for match in matches:
+        feature_counts[match["league_code"]].update({key: int(value) for key, value in feature_availability(match).items()})
         hits: list[int] = []
         for ordinal, (name, (function, _description, _requires_json)) in enumerate(all_filters.items()):
             try:
@@ -206,9 +209,12 @@ def build() -> None:
                 "category": public_filter_category(source_categories.get(name, "Other")),
                 "requiresJson": bool(requires_json),
                 "matches": hit_counts[name],
+                "rawMatches": hit_counts[name],
             }
         )
 
+    filters, removed_filters = prune_filters(records, filters)
+    print(f"  Kept {len(filters)} filters; retired {len(removed_filters)} below {MIN_FILTER_MATCHES} priced matches", flush=True)
     league_counts = Counter(record["league"] for record in records)
     season_counts = Counter(record["season"] for record in records)
     available_seasons = sorted(season_counts)
@@ -223,6 +229,7 @@ def build() -> None:
             "kind": "uefa" if code in UEFA_CODES else "domestic",
             "calendarYear": calendar, "matches": len(rows),
             "eventMatches": sum(row["jsonAvailable"] for row in rows),
+            "featureCounts": dict(feature_counts[code]),
             "markets": {market: sum(row["odds"][market] is not None for row in rows) for market in ("home", "draw", "away", "over25", "under25")},
             "betfairMarkets": {market: sum(row["oddsTypes"][market] == "betfair" for row in rows) for market in ("home", "draw", "away", "over25", "under25")},
             "marketLastDates": {market: max((row["date"] for row in rows if row["odds"][market]), default=None) for market in ("home", "draw", "away", "over25", "under25")},
@@ -232,6 +239,10 @@ def build() -> None:
     payload = {
         "meta": {
             "schemaVersion": 2,
+            "firstSeason": FIRST_SEASON,
+            "minFilterMatches": MIN_FILTER_MATCHES,
+            "candidateFilterCount": len(all_filters),
+            "removedFilters": removed_filters,
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "cutoffDate": cutoff,
             "firstMatchDate": records[0]["date"],
@@ -262,6 +273,8 @@ def build() -> None:
     print(f"  {len(competitions)} competitions, {len(available_seasons)} season buckets; last match {records[-1]['date']}")
     for competition in competitions:
         print(f"    {competition['name']}: {competition['matches']:,} matches, {competition['eventMatches']:,} enriched; priced through {competition['lastOddsDate']}; O/U odds {competition['markets']['over25']:,}")
+    for retired in removed_filters:
+        print(f"    RETIRED {retired['id']}: {retired['matches']} priced matches")
 
 
 if __name__ == "__main__":

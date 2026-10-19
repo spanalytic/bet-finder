@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bookmark,
   ChevronDown,
@@ -19,11 +19,10 @@ import {
 import { ResultsPanel } from "@/components/results-panel";
 import { CompetitionSelector, SeasonSelector } from "@/components/scope-selectors";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { FilterPicker } from "@/components/filter-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -33,7 +32,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { runBacktest } from "@/lib/backtest-engine";
@@ -79,6 +77,7 @@ function sanitizeGroups(
   raw: unknown,
   validIds: Set<string>,
   maxFilters: number,
+  preserveUnavailable = false,
 ): string[][] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
@@ -89,7 +88,7 @@ function sanitizeGroups(
     for (const filter of group) {
       if (
         typeof filter === "string" &&
-        validIds.has(filter) &&
+        (validIds.has(filter) || preserveUnavailable) &&
         !seen.has(filter) &&
         seen.size < maxFilters
       ) {
@@ -109,7 +108,7 @@ function readSavedStrategies(validIds: Set<string>, maxFilters: number): SavedSt
     const parsed = JSON.parse(saved) as Array<SavedStrategy & { filters?: string[] }>;
     return parsed.map((item) => ({
       ...item,
-      filterGroups: sanitizeGroups(toGroups(item.filterGroups, item.filters), validIds, maxFilters),
+      filterGroups: sanitizeGroups(toGroups(item.filterGroups, item.filters), validIds, maxFilters, true),
     }));
   } catch {
     return [];
@@ -137,7 +136,8 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
   const [minBets, setMinBets] = useState(100);
   const [betfairCommission, setBetfairCommission] = useState(5);
   const [filterSearch, setFilterSearch] = useState("");
-  const [openCategories, setOpenCategories] = useState<string[]>([]);
+  const [workspaceStep, setWorkspaceStep] = useState<"filters" | "results">("filters");
+  const stepHeading = useRef<HTMLHeadingElement>(null);
   const [hydrated, setHydrated] = useState(false);
   const [index, setIndex] = useState<BacktestIndex | null>(null);
   const [result, setResult] = useState<BacktestResponse | null>(null);
@@ -149,12 +149,36 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
   const [strategyName, setStrategyName] = useState("");
 
   const filtersById = useMemo(
-    () => new Map(filters.map((filter) => [filter.id, filter])),
-    [filters],
+    () => new Map([...filters, ...meta.removedFilters].map((filter) => [filter.id, filter])),
+    [filters, meta.removedFilters],
   );
 
   const flatFilters = useMemo(() => filterGroups.flat(), [filterGroups]);
   const capReached = flatFilters.length >= meta.maxFilters;
+  const unavailableFilters = flatFilters.filter((id) => !validFilterIds.has(id));
+  const needsReview = unavailableFilters.length > 0;
+  const scopeCounts = useMemo(() => {
+    if (!index) return null;
+    const leagues = new Set(selectedLeagues);
+    const seasons = new Set(selectedSeasons);
+    const counts = new Map<string, number>();
+    for (const match of index.matches) {
+      if (!leagues.has(match.league) || !seasons.has(match.season) || !(match.odds[market] && match.odds[market]! > 1)) continue;
+      for (const hit of match.filterHits) {
+        const id = typeof hit === "number" ? index.filters[hit]?.id : hit;
+        if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [index, market, selectedLeagues, selectedSeasons]);
+
+  function changeStep(step: "filters" | "results") {
+    setWorkspaceStep(step);
+    window.requestAnimationFrame(() => {
+      stepHeading.current?.focus({ preventScroll: true });
+      stepHeading.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   // Restore the saved strategy list and the in-progress setup from the last visit.
   useEffect(() => {
@@ -173,10 +197,10 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
           }
           if (Array.isArray(saved.seasons)) {
             const seasons = saved.seasons.filter((season) => meta.availableSeasons.includes(season));
-            if (seasons.length) setSelectedSeasons(seasons);
+            setSelectedSeasons(seasons);
           }
           setFilterGroups(
-            sanitizeGroups(toGroups(saved.filterGroups, saved.filters), validFilterIds, meta.maxFilters),
+            sanitizeGroups(toGroups(saved.filterGroups, saved.filters), validFilterIds, meta.maxFilters, true),
           );
           if (typeof saved.minBets === "number") {
             setMinBets(Math.min(Math.max(saved.minBets, 10), 10_000));
@@ -226,7 +250,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
   }, [retryToken]);
 
   useEffect(() => {
-    if (!index) return;
+    if (!index || needsReview) return;
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError(null);
@@ -248,7 +272,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     }, 120);
 
     return () => window.clearTimeout(timer);
-  }, [betfairCommission, filterGroups, index, market, minBets, retryToken, selectedLeagues, selectedSeasons]);
+  }, [betfairCommission, filterGroups, index, market, minBets, needsReview, retryToken, selectedLeagues, selectedSeasons]);
 
   const filteredCategories = useMemo(() => {
     const search = filterSearch.trim().toLocaleLowerCase();
@@ -264,8 +288,6 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     }
     return Array.from(categories);
   }, [filterSearch, filters]);
-
-  const searching = filterSearch.trim().length > 0;
 
   const ruleSummary = useMemo(() => {
     const parts = filterGroups
@@ -311,12 +333,12 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     setMinBets(100);
     setBetfairCommission(5);
     setFilterSearch("");
-    setOpenCategories([]);
+    setWorkspaceStep("filters");
   }
 
   function saveStrategy() {
     const name = strategyName.trim();
-    if (!name) return;
+    if (!name || needsReview || !selectedSeasons.length) return;
     const strategy: SavedStrategy = {
       id: crypto.randomUUID(),
       name,
@@ -339,12 +361,13 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     if (!strategy) return;
     setMarket(strategy.market);
     setSelectedLeagues(strategy.leagues);
-    setSelectedSeasons(strategy.seasons);
-    setFilterGroups(sanitizeGroups(strategy.filterGroups, validFilterIds, meta.maxFilters));
+    setSelectedSeasons(strategy.seasons.filter((season) => meta.availableSeasons.includes(season)));
+    setFilterGroups(sanitizeGroups(strategy.filterGroups, validFilterIds, meta.maxFilters, true));
     setOrTargetGroup(null);
     setMinBets(strategy.minBets);
     setBetfairCommission(strategy.betfairCommission ?? 5);
     setStrategiesDialogOpen(false);
+    setWorkspaceStep("filters");
   }
 
   function deleteStrategy(id: string) {
@@ -463,12 +486,24 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
           </div>
         </section>
 
-        <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[290px_minmax(0,1fr)] lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)]">
-          <aside aria-label="Strategy rules" className="min-w-0">
+        <nav aria-label="Strategy steps" className="sticky top-0 z-20 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/95 p-3 shadow-sm backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Button aria-current={workspaceStep === "filters" ? "step" : undefined} onClick={() => changeStep("filters")} variant={workspaceStep === "filters" ? "secondary" : "ghost"}>1. Choose filters</Button>
+            <Button aria-current={workspaceStep === "results" ? "step" : undefined} disabled={needsReview || !selectedSeasons.length} onClick={() => changeStep("results")} variant={workspaceStep === "results" ? "secondary" : "ghost"}>2. Results</Button>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">{flatFilters.length} of {meta.maxFilters} filters selected</span>
+            <Button disabled={workspaceStep === "filters" && (needsReview || !selectedSeasons.length)} onClick={() => changeStep(workspaceStep === "filters" ? "results" : "filters")}>{workspaceStep === "filters" ? "Show results" : "Edit filters"}</Button>
+          </div>
+        </nav>
+        <h2 className="mb-2 scroll-mt-24 text-2xl font-semibold tracking-tight outline-none" ref={stepHeading} tabIndex={-1}>{workspaceStep === "filters" ? "Choose your filters" : "Your strategy results"}</h2>
+        <p className="mb-6 text-sm leading-6 text-muted-foreground">{workspaceStep === "filters" ? "Browse the full filter library below. Select your signals, then show the results when you’re ready." : `${marketLabel(market)} · ${selectedLeagues.length} competitions · ${selectedSeasons.length} seasons. Edit your filters whenever you want to refine the strategy.`}</p>
+        <div className="space-y-6">
+          {workspaceStep === "filters" && <section aria-label="Strategy rules" className="min-w-0">
             <Card className="gap-0 rounded-2xl border border-border/80 bg-card py-0 shadow-none ring-0">
               <CardHeader className="gap-2 border-b border-border/70 px-5 py-5">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-[15px] font-semibold">Your filters</CardTitle>
+                  <CardTitle className="text-base font-semibold">Selected rules</CardTitle>
                   <div className="flex items-center gap-2">
                     {flatFilters.length > 0 && (
                       <Button
@@ -493,17 +528,18 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pt-4 pb-5">
+                {needsReview && (
+                  <div className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm leading-6" role="alert">
+                    This setup contains removed filters: {unavailableFilters.map((id) => filtersById.get(id)?.label ?? id).join(", ")}. Remove the marked chips before running it. Saved rules have not been silently changed.
+                  </div>
+                )}
+                {!selectedSeasons.length && <p className="text-sm text-destructive" role="alert">Choose a supported season from 2022/23 onwards before running this setup.</p>}
                 {filterGroups.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {filterGroups.map((group, index) => {
                       const isActive = index === orTargetGroup;
                       return (
                         <div key={index}>
-                          {index > 0 && (
-                            <div className="flex items-center gap-2 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                              <span className="h-px flex-1 bg-border" /> and <span className="h-px flex-1 bg-border" />
-                            </div>
-                          )}
                           <div
                             className={cn(
                               "rounded-xl border p-3 transition-colors",
@@ -514,7 +550,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                           >
                             <div className="mb-2 flex items-center justify-between gap-2">
                               <span className="flex-1 text-[11px] font-medium text-muted-foreground">
-                                Group {index + 1} <span className="font-normal">· {group.length > 1 ? "match any" : "required"}</span>
+                                {index > 0 ? "AND · " : ""}Group {index + 1} <span className="font-normal">· {group.length > 1 ? "match any" : "required"}</span>
                               </span>
                               <Button
                                 aria-label={`Add OR alternative to group ${index + 1}`}
@@ -547,8 +583,9 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                                   {filterIndex > 0 && (
                                     <span className="text-[9px] font-semibold uppercase text-muted-foreground">or</span>
                                   )}
-                                  <Badge className="h-auto max-w-full gap-1 rounded-md bg-secondary/80 py-1 text-[11px] font-normal" variant="secondary">
+                                  <Badge className={cn("h-auto max-w-full gap-1 rounded-md bg-secondary/80 py-1 text-xs font-normal", !validFilterIds.has(id) && "border-destructive/30 bg-destructive/10 text-destructive")} variant="secondary">
                                     {filtersById.get(id)?.label ?? id}
+                                    {!validFilterIds.has(id) && <span className="font-medium">· Removed</span>}
                                     <Button
                                       aria-label={`Remove ${filtersById.get(id)?.label ?? id}`}
                                       className="-mr-1 size-4 rounded-full p-0 hover:bg-foreground/10"
@@ -604,96 +641,40 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                     All {meta.maxFilters} filters are in use. Remove one to try another signal.
                   </p>
                 )}
+                <details className="rounded-lg border bg-secondary/20 p-3 text-xs leading-5 text-muted-foreground">
+                  <summary className="cursor-pointer font-medium">{filters.length} available filters · {meta.removedFilters.length} low-sample filters removed</summary>
+                  <p className="mt-2">Filters need at least {meta.minFilterMatches} distinct matches with usable odds across all leagues from 2022/23 onwards. This is a library threshold, not a guarantee about a combined strategy or a smaller selection.</p>
+                  <ul className="mt-2 space-y-1">{meta.removedFilters.map((filter) => <li key={filter.id}>{filter.label}: {filter.matches} usable matches</li>)}</ul>
+                </details>
 
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     aria-label="Search filters"
-                    className="h-10 border-border/80 bg-background/50 pl-9 text-xs"
+                    className="h-12 border-border/80 bg-background/50 pl-10 text-sm"
                     onChange={(event) => setFilterSearch(event.target.value)}
                     placeholder={`Search ${meta.filterCount} filters…`}
                     value={filterSearch}
                   />
                 </div>
 
-                <ScrollArea className="h-[420px] pr-3 lg:h-[480px]">
-                  {filteredCategories.length ? (
-                    <Accordion
-                      onValueChange={(value) => {
-                        if (!searching) setOpenCategories(value);
-                      }}
-                      type="multiple"
-                      value={searching ? filteredCategories.map(([category]) => category) : openCategories}
-                    >
-                      {filteredCategories.map(([category, categoryFilters]) => (
-                        <AccordionItem key={category} value={category}>
-                          <AccordionTrigger className="py-3.5 text-xs font-normal hover:no-underline">
-                            <span className="flex items-center gap-2.5">
-                              {category}
-                              <span className="text-[10px] text-muted-foreground/70">
-                                {categoryFilters.length}
-                              </span>
-                              {!searching &&
-                                categoryFilters.some((filter) => flatFilters.includes(filter.id)) && (
-                                  <span className="size-1.5 rounded-full bg-primary" />
-                                )}
-                            </span>
-                          </AccordionTrigger>
-                          <AccordionContent className="space-y-1 pb-3">
-                            {categoryFilters.map((filter) => {
-                              const selected = flatFilters.includes(filter.id);
-                              const disabled = !selected && capReached;
-                              return (
-                                <label
-                                  className={cn(
-                                    "flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-3 transition-colors hover:bg-muted/60",
-                                    selected && "bg-primary/8",
-                                    disabled && "cursor-not-allowed opacity-45",
-                                  )}
-                                  htmlFor={filter.id}
-                                  key={filter.id}
-                                >
-                                  <Checkbox
-                                    className="mt-0.5"
-                                    checked={selected}
-                                    disabled={disabled}
-                                    id={filter.id}
-                                    onCheckedChange={() => toggleFilter(filter.id)}
-                                  />
-                                  <span className="min-w-0 flex-1">
-                                    <span className="flex items-center gap-1.5 text-xs font-medium leading-4">
-                                      {filter.label}
-                                    </span>
-                                    <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-                                      {filter.description}
-                                    </span>
-                                  </span>
-                                  <span title="Matching games across all indexed history" className="pt-0.5 text-[10px] text-muted-foreground/70">
-                                    {filter.matches.toLocaleString()}
-                                  </span>
-                                </label>
-                              );
-                            })}
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  ) : (
-                    <div className="py-10 text-center text-sm text-muted-foreground">No filters match that search.</div>
-                  )}
-                </ScrollArea>
+                <FilterPicker capReached={capReached} categories={filteredCategories} counts={scopeCounts} minimum={meta.minFilterMatches} onToggle={toggleFilter} selected={flatFilters} />
               </CardContent>
             </Card>
-          </aside>
+          </section>}
 
-          <section aria-label="Backtest results" className="min-w-0">
+          {workspaceStep === "results" && <section aria-label="Backtest results" className="min-w-0 space-y-5">
+            <div className="rounded-xl border bg-card p-5">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Strategy rule</p>
+              <p className="mt-2 text-sm leading-6">{ruleSummary || "All matches in the selected competitions and seasons (no filters)."}</p>
+            </div>
             <ResultsPanel
-              error={error}
-              loading={loading}
-              onRetry={() => setRetryToken((token) => token + 1)}
-              result={result}
+              error={needsReview ? "This saved setup contains unavailable filters. Edit the filters before running it." : error}
+              loading={needsReview ? false : loading}
+              onRetry={needsReview ? undefined : () => setRetryToken((token) => token + 1)}
+              result={needsReview ? null : result}
             />
-          </section>
+          </section>}
         </div>
       </main>
 
@@ -727,7 +708,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                 placeholder="e.g. High xG goal candidates"
                 value={strategyName}
               />
-              <Button disabled={!strategyName.trim()} onClick={saveStrategy}>
+              <Button disabled={!strategyName.trim() || needsReview || !selectedSeasons.length} onClick={saveStrategy}>
                 <Save data-icon="inline-start" /> Save
               </Button>
             </div>
@@ -747,6 +728,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                 >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{strategy.name}</div>
+                    {strategy.filterGroups.flat().some((id) => !validFilterIds.has(id)) && <p className="mt-1 text-xs text-destructive">Contains a removed filter · review required</p>}
                     <div className="mt-0.5 text-[11px] text-muted-foreground">
                       {marketLabel(strategy.market)} · {strategyFilterCount(strategy)} filter{strategyFilterCount(strategy) === 1 ? "" : "s"} in {strategy.filterGroups.length} group{strategy.filterGroups.length === 1 ? "" : "s"} · saved {shortDate.format(new Date(strategy.createdAt))}
                     </div>

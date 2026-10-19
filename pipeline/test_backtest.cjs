@@ -20,22 +20,29 @@ assert.equal(runBacktest(index,{...query, filterGroups:[['a']],betfairCommission
 const legacy = {...index, meta: {}, matches:index.matches.map(m=>({...m, filterHits:m.filterHits.map(i=>index.filters[i].id)}))};
 assert.deepEqual(runBacktest(legacy,query).metrics,runBacktest(index,query).metrics);
 assert.throws(()=>runBacktest(index,{...query,filterGroups:[['a','retired-filter']]}),/unavailable filter/);
+const strict = {...index,meta:{...index.meta,eventPolicy:{onlyComplete:true}},matches:[{...row('complete',[0]),eventDetailsComplete:true},row('shell',[0])]};
+assert.equal(runBacktest(strict,{...query,filterGroups:[['a']]}).metrics.bets,1);
 const real = JSON.parse(fs.readFileSync(path.join(__dirname,'../data/backtest-index.json'),'utf8'));
 assert.equal(real.meta.competitions.length,33);
-assert.equal(real.meta.filterCount,120);
+assert.equal(real.meta.filterCount,real.filters.length);
 assert.equal(real.meta.candidateFilterCount,125);
 assert.equal(real.meta.minFilterMatches,100);
-assert.equal(real.meta.removedFilters.length,5);
+assert.equal(real.meta.removedFilters.length+real.filters.length,125);
+assert.equal(real.meta.eventPolicy.onlyComplete,true);
+assert.ok(real.matches.every(match=>match.eventDetailsComplete===true&&match.jsonAvailable===true));
+assert.equal(real.meta.eventPolicy.sourceMatches-real.meta.eventPolicy.excludedMatches,real.matches.length);
+assert.ok(real.meta.competitions.every(item=>item.sourceMatches===item.matches+item.incompleteEventMatches+item.missingEventMatches));
 assert.ok(real.filters.every(filter=>filter.matches>=100));
 assert.ok(real.meta.removedFilters.every(filter=>filter.matches<100));
 assert.ok(real.matches.every(match=>match.season>='2022-2023'));
 assert.deepEqual(real.meta.availableSeasons,['2022-2023','2023-2024','2024-2025','2025-2026','2026-2027']);
 assert.ok(real.meta.competitions.every(item=>Object.keys(item.featureCounts).length>0));
-assert.ok(real.matches.some(m => m.date === '2026-10-01'));
+assert.equal(real.meta.cutoffDate,'2026-10-01');
+assert.equal(real.meta.lastMatchDate,real.matches.map(m=>m.date).sort().at(-1));
 assert.ok(real.matches.every(m => m.date <= '2026-10-01'));
 assert.equal(new Set(real.matches.map(m=>m.id)).size,real.matches.length);
 assert.equal(new Set(real.matches.map(m=>[m.leagueCode,m.date,m.home,m.away].join('|'))).size,real.matches.length);
-assert.equal(real.matches.filter(m=>m.leagueCode==='E0').length,1570);
+assert.ok(real.matches.some(m=>m.leagueCode==='E0'));
 for(const match of real.matches) {
   assert.ok(match.filterHits.every(hit=>Number.isInteger(hit)&&hit>=0&&hit<real.filters.length));
   for(const [market,type] of Object.entries(match.oddsTypes)) {

@@ -420,7 +420,7 @@ export function ResultsPanel({ result, loading, error, onRetry }: ResultsPanelPr
           <p>{totalFilters} selected filter{totalFilters === 1 ? "" : "s"} across {ruleGroups.length} group{ruleGroups.length === 1 ? "" : "s"}. Groups use AND; filters within each group use OR.</p>
           <p>{result.missingOdds.toLocaleString()} qualifying matches excluded for missing market odds.{result.enrichmentCoverage !== null && ` Event-data coverage: ${result.enrichmentCoverage}%.`}</p>
           <p>One-unit stakes. Maximum closing bookmaker odds preferred, opening maximum fallback if needed. Betfair uses the last recorded price in the 10 minutes strictly before kickoff; {result.query.betfairCommission ?? 5}% commission on winning exchange profit. No in-play or prediction-market odds.</p>
-          <p>Rolling form is specific to the competition and season. Early fixtures remain available but cannot match filters needing missing history. Coverage varies; an absent feature is not a negative signal. Available prices may have been lower in practice. Trying many combinations can produce attractive results by chance.</p>
+          <p>Only validated detailed-event fixtures are included. Weather and player market values remain optional. Rolling windows and previous-match comparisons are unavailable across known event-data gaps, not extended to older games. Fixtures missing from all sources remain a limitation. Early fixtures cannot match filters needing missing history. An absent feature is not a negative signal. Available prices may have been lower in practice. Trying many combinations can produce attractive results by chance.</p>
         </div>
       </details>
     </div>

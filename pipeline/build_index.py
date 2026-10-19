@@ -21,6 +21,7 @@ from typing import Any
 from competitions import COMPETITIONS, UEFA_CODES
 from source_data import load_csv_matches, load_events, merge_sources
 from filter_quality import FIRST_SEASON, MIN_FILTER_MATCHES, feature_availability, prune_filters, restrict_seasons
+from event_quality import EVENT_QUALITY_VERSION, FULL_EVENT_REQUIREMENTS, complete_event_pool, guard_history_gaps
 
 
 CURRENT_SEASON = "2026-2027"
@@ -128,10 +129,12 @@ def build() -> None:
     for mapping in SOFASCORE_TEAM_NAMES.values():
         if isinstance(mapping, dict):
             aliases.update({key: value for key, value in mapping.items() if isinstance(value, str)})
-    matches = merge_sources(csv_rows, events, FOOTBALL_DATA_TEAM_NAMES, aliases)
+    source_matches = merge_sources(csv_rows, events, FOOTBALL_DATA_TEAM_NAMES, aliases)
+    matches, event_coverage = complete_event_pool(source_matches)
     if not matches:
-        raise SystemExit("No completed matches found; the previous index was preserved")
-    print(f"  {len(matches):,} unique completed matches; early-season and unpriced events retained", flush=True)
+        raise SystemExit("No matches passed the detailed-event checks; the previous index was preserved")
+    source_count = sum(value["sourceMatches"] for value in event_coverage.values())
+    print(f"  {len(matches):,}/{source_count:,} unique fixtures passed detailed-event checks; incomplete/score-only fixtures excluded", flush=True)
 
     print("Step 3/7: attaching starting-XI market values", flush=True)
     screener.add_starting_xi_market_value_features(matches, source_root / screener.XI_VALUE_FEATURES_CSV)
@@ -142,13 +145,15 @@ def build() -> None:
     screener.compute_rolling_stats(matches)
     screener.compute_lineup_changes(matches)
     screener.compute_formation_changes(matches)
+    guard_history_gaps(source_matches)
 
     print("Step 5/7: computing schedule congestion and Elo", flush=True)
     schedules = screener.load_team_schedules()
-    close_mins_map = {event["match_id"]: event["_close_minutes"] for event in events if event.get("match_id")}
+    close_mins_map = {match["match_id"]: match["_close_minutes"] for match in matches}
     screener.compute_activity_stats(matches, schedules, close_mins_map)
     # Stable team-name identities prevent FotMob/SofaScore ID collisions in Elo.
-    elo_events = [{**match, "home_team_id": match["_home_identity"], "away_team_id": match["_away_identity"]} for match in events]
+    # Use the unique eligible pool, not duplicate provider records or shells.
+    elo_events = [{**match, "home_team_id": match["_home_identity"], "away_team_id": match["_away_identity"]} for match in matches]
     add_internal_elo_features_from_event_matches(matches, elo_events)
 
     print("Step 6/7: evaluating candidate filters and auditing input coverage")
@@ -158,7 +163,7 @@ def build() -> None:
     source_categories = extract_categories(source_root / "analysis" / "prematch_strategy_screener.py")
     hit_counts: Counter[str] = Counter()
     records: list[dict[str, Any]] = []
-    feature_counts = {code: Counter() for code in COMPETITIONS}
+    feature_counts = {code: Counter({key: 0 for key in feature_availability({})}) for code in COMPETITIONS}
 
     for match in matches:
         feature_counts[match["league_code"]].update({key: int(value) for key, value in feature_availability(match).items()})
@@ -195,6 +200,7 @@ def build() -> None:
                 "oddsTypes": match["_price_types"],
                 "betfairMinutes": match["_price_minutes"],
                 "jsonAvailable": bool(match.get("match_id")),
+                "eventDetailsComplete": match["_full_event_details"],
                 "oddsSource": match.get("odds_source", "historical archive"),
             }
         )
@@ -221,19 +227,20 @@ def build() -> None:
     competitions = []
     for code, (name, country, _directory, calendar) in COMPETITIONS.items():
         rows = [row for row in records if row["leagueCode"] == code]
-        if not rows:
-            continue
         priced = [row for row in rows if any(row["odds"].values())]
         competitions.append({
             "code": code, "name": name, "country": country,
             "kind": "uefa" if code in UEFA_CODES else "domestic",
             "calendarYear": calendar, "matches": len(rows),
             "eventMatches": sum(row["jsonAvailable"] for row in rows),
+            "sourceMatches": event_coverage.get(code, {}).get("sourceMatches", 0),
+            "incompleteEventMatches": event_coverage.get(code, {}).get("incompleteEventMatches", 0),
+            "missingEventMatches": event_coverage.get(code, {}).get("missingEventMatches", 0),
             "featureCounts": dict(feature_counts[code]),
             "markets": {market: sum(row["odds"][market] is not None for row in rows) for market in ("home", "draw", "away", "over25", "under25")},
             "betfairMarkets": {market: sum(row["oddsTypes"][market] == "betfair" for row in rows) for market in ("home", "draw", "away", "over25", "under25")},
             "marketLastDates": {market: max((row["date"] for row in rows if row["odds"][market]), default=None) for market in ("home", "draw", "away", "over25", "under25")},
-            "firstDate": rows[0]["date"], "lastDate": rows[-1]["date"],
+            "firstDate": rows[0]["date"] if rows else None, "lastDate": rows[-1]["date"] if rows else None,
             "lastOddsDate": priced[-1]["date"] if priced else None,
         })
     payload = {
@@ -243,6 +250,13 @@ def build() -> None:
             "minFilterMatches": MIN_FILTER_MATCHES,
             "candidateFilterCount": len(all_filters),
             "removedFilters": removed_filters,
+            "eventPolicy": {
+                "onlyComplete": True, "qualityVersion": EVENT_QUALITY_VERSION,
+                "requirements": FULL_EVENT_REQUIREMENTS,
+                "optionalFields": ["Weather", "Player market values"],
+                "sourceMatches": source_count, "excludedMatches": source_count - len(matches),
+                "historyPolicy": "Rolling windows and previous-match comparisons are unavailable across known missing/incomplete event fixtures, rather than skipping to older games. Elo uses the unique eligible history. Fixtures absent from all sources remain a coverage limitation.",
+            },
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "cutoffDate": cutoff,
             "firstMatchDate": records[0]["date"],
@@ -257,7 +271,7 @@ def build() -> None:
             "leagueCounts": dict(sorted(league_counts.items())),
             "seasonCounts": dict(sorted(season_counts.items())),
             "competitions": competitions,
-            "methodology": "Flat 1-unit stakes. Maximum closing bookmaker odds preferred, opening maximum fallback when closing is missing. Betfair exchange fallback uses the last recorded price strictly before kickoff, at most 10 minutes old; commission is applied to winning exchange profit at the selected rate. No kickoff/in-play or Polymarket prices. Rolling form is within competition and season; opening fixtures remain in the pool but cannot match filters requiring unavailable history. Calendar-year leagues use the season bucket starting in that year. Coverage varies by competition, season and market; missing odds are excluded from returns.",
+            "methodology": "Only fixtures passing the detailed-event checks are indexed: both XIs/formations, core team statistics including xG, a reconciled event timeline and shot map. Weather and player market values are optional and may be missing. Rolling windows and previous-match comparisons are unavailable across known incomplete/missing-event fixtures, never silently extended to older games. Elo uses only unique eligible event fixtures; source fixture omissions remain a limitation. Flat 1-unit stakes. Maximum closing bookmaker odds preferred, opening maximum fallback when closing is missing. Betfair exchange fallback uses the last recorded price strictly before kickoff, at most 10 minutes old; commission is applied to winning exchange profit at the selected rate. No kickoff/in-play or Polymarket prices. Rolling form is within competition and season; opening fixtures remain in the pool but cannot match filters requiring unavailable history. Calendar-year leagues use the season bucket starting in that year. Coverage varies by competition, season and market; missing odds are excluded from returns.",
         },
         "filters": filters,
         "matches": records,

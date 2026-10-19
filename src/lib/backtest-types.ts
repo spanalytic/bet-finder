@@ -20,6 +20,15 @@ export interface IndexMeta {
   minFilterMatches: number;
   candidateFilterCount: number;
   removedFilters: RetiredFilter[];
+  eventPolicy: {
+    onlyComplete: boolean;
+    qualityVersion: number;
+    requirements: string[];
+    optionalFields: string[];
+    sourceMatches: number;
+    excludedMatches: number;
+    historyPolicy: string;
+  };
   generatedAt: string;
   cutoffDate: string;
   firstMatchDate: string;
@@ -45,12 +54,15 @@ export interface CompetitionCoverage {
   calendarYear: boolean;
   matches: number;
   eventMatches: number;
+  sourceMatches: number;
+  incompleteEventMatches: number;
+  missingEventMatches: number;
   featureCounts: Record<string, number>;
   markets: Record<MarketId, number>;
   betfairMarkets: Record<MarketId, number>;
   marketLastDates: Record<MarketId, string | null>;
-  firstDate: string;
-  lastDate: string;
+  firstDate: string | null;
+  lastDate: string | null;
   lastOddsDate: string | null;
 }
 
@@ -71,6 +83,7 @@ export interface IndexedMatch {
   /** v2 uses filter ordinals to keep the expanded download compact. */
   filterHits: Array<string | number>;
   jsonAvailable: boolean;
+  eventDetailsComplete: boolean;
   oddsSource: string;
 }
 

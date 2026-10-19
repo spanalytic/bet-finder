@@ -145,7 +145,8 @@ export function runBacktest(
 
   const pool = index.matches.filter(
     (match) =>
-      selectedLeagues.has(match.league) && selectedSeasons.has(match.season),
+      selectedLeagues.has(match.league) && selectedSeasons.has(match.season) &&
+      (!index.meta.eventPolicy?.onlyComplete || match.eventDetailsComplete === true),
   );
   const qualifying = groups.length
     ? pool.filter((match) =>

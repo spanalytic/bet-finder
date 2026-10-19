@@ -163,6 +163,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     const seasons = new Set(selectedSeasons);
     const counts = new Map<string, number>();
     for (const match of index.matches) {
+      if (index.meta.eventPolicy.onlyComplete && !match.eventDetailsComplete) continue;
       if (!leagues.has(match.league) || !seasons.has(match.season) || !(match.odds[market] && match.odds[market]! > 1)) continue;
       for (const hit of match.filterHits) {
         const id = typeof hit === "number" ? index.filters[hit]?.id : hit;
@@ -193,7 +194,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
           }
           if (Array.isArray(saved.leagues)) {
             const leagues = saved.leagues.filter((league) => allLeagues.includes(league));
-            if (leagues.length) setSelectedLeagues(leagues);
+            setSelectedLeagues(leagues);
           }
           if (Array.isArray(saved.seasons)) {
             const seasons = saved.seasons.filter((season) => meta.availableSeasons.includes(season));
@@ -338,7 +339,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
 
   function saveStrategy() {
     const name = strategyName.trim();
-    if (!name || needsReview || !selectedSeasons.length) return;
+    if (!name || needsReview || !selectedSeasons.length || !selectedLeagues.length) return;
     const strategy: SavedStrategy = {
       id: crypto.randomUUID(),
       name,
@@ -360,7 +361,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     const strategy = savedStrategies.find((item) => item.id === id);
     if (!strategy) return;
     setMarket(strategy.market);
-    setSelectedLeagues(strategy.leagues);
+    setSelectedLeagues(strategy.leagues.filter((league) => allLeagues.includes(league)));
     setSelectedSeasons(strategy.seasons.filter((season) => meta.availableSeasons.includes(season)));
     setFilterGroups(sanitizeGroups(strategy.filterGroups, validFilterIds, meta.maxFilters, true));
     setOrTargetGroup(null);
@@ -457,7 +458,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
           <div className="flex flex-wrap items-start justify-between gap-3 border-t border-border/70 px-5 py-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[11px] text-muted-foreground">
               <span className="flex items-center gap-2"><Database className="size-3.5" /> {meta.matchCount.toLocaleString()} matches available</span>
-              <span>{meta.competitions.length} competitions</span>
+              <span>{allLeagues.length} available competitions</span>
               <span>Max bookmaker · Betfair fallback</span>
               <span>1u flat stake</span>
             </div>
@@ -486,14 +487,21 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
           </div>
         </section>
 
+        <details className="mb-6 rounded-xl border border-primary/15 bg-primary/5 p-4 text-xs leading-5 text-muted-foreground">
+          <summary className="cursor-pointer font-medium text-foreground">Detailed events only · {meta.matchCount.toLocaleString()} eligible matches</summary>
+          <p className="mt-2">{meta.eventPolicy.excludedMatches.toLocaleString()} source fixtures are excluded because event details are missing or incomplete. No score-only or odds-only matches enter the backtest.</p>
+          <ul className="mt-2 list-inside list-disc space-y-1">{meta.eventPolicy.requirements.map((requirement) => <li key={requirement}>{requirement}</li>)}</ul>
+          <p className="mt-2">Weather and player market values remain optional and may be unavailable. {meta.eventPolicy.historyPolicy}</p>
+        </details>
+
         <nav aria-label="Strategy steps" className="sticky top-0 z-20 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/95 p-3 shadow-sm backdrop-blur">
           <div className="flex items-center gap-2">
             <Button aria-current={workspaceStep === "filters" ? "step" : undefined} onClick={() => changeStep("filters")} variant={workspaceStep === "filters" ? "secondary" : "ghost"}>1. Choose filters</Button>
-            <Button aria-current={workspaceStep === "results" ? "step" : undefined} disabled={needsReview || !selectedSeasons.length} onClick={() => changeStep("results")} variant={workspaceStep === "results" ? "secondary" : "ghost"}>2. Results</Button>
+            <Button aria-current={workspaceStep === "results" ? "step" : undefined} disabled={needsReview || !selectedSeasons.length || !selectedLeagues.length} onClick={() => changeStep("results")} variant={workspaceStep === "results" ? "secondary" : "ghost"}>2. Results</Button>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">{flatFilters.length} of {meta.maxFilters} filters selected</span>
-            <Button disabled={workspaceStep === "filters" && (needsReview || !selectedSeasons.length)} onClick={() => changeStep(workspaceStep === "filters" ? "results" : "filters")}>{workspaceStep === "filters" ? "Show results" : "Edit filters"}</Button>
+            <Button disabled={workspaceStep === "filters" && (needsReview || !selectedSeasons.length || !selectedLeagues.length)} onClick={() => changeStep(workspaceStep === "filters" ? "results" : "filters")}>{workspaceStep === "filters" ? "Show results" : "Edit filters"}</Button>
           </div>
         </nav>
         <h2 className="mb-2 scroll-mt-24 text-2xl font-semibold tracking-tight outline-none" ref={stepHeading} tabIndex={-1}>{workspaceStep === "filters" ? "Choose your filters" : "Your strategy results"}</h2>
@@ -534,6 +542,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                   </div>
                 )}
                 {!selectedSeasons.length && <p className="text-sm text-destructive" role="alert">Choose a supported season from 2022/23 onwards before running this setup.</p>}
+                {!selectedLeagues.length && <p className="text-sm text-destructive" role="alert">The previously selected leagues have no eligible detailed-event matches. Choose an available competition before running this setup.</p>}
                 {filterGroups.length > 0 && (
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {filterGroups.map((group, index) => {
@@ -708,7 +717,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                 placeholder="e.g. High xG goal candidates"
                 value={strategyName}
               />
-              <Button disabled={!strategyName.trim() || needsReview || !selectedSeasons.length} onClick={saveStrategy}>
+              <Button disabled={!strategyName.trim() || needsReview || !selectedSeasons.length || !selectedLeagues.length} onClick={saveStrategy}>
                 <Save data-icon="inline-start" /> Save
               </Button>
             </div>

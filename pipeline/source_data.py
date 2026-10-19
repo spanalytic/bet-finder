@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from competitions import COMPETITIONS, UEFA_CODES
+from event_quality import EVENT_QUALITY_VERSION, event_quality
 
 
 def number(value):
@@ -186,10 +187,11 @@ def event_match(data, code, season, cutoff, screener):
     if not date or date > cutoff or not score or not data.get("home_team") or not data.get("away_team"):
         return None
     hg, ag = map(int, score.groups())
+    quality = event_quality(data)
     match = {"league": COMPETITIONS[code][0], "league_code": code, "season": season_key(season, date, code), "date": date,
              "home_team": data["home_team"], "away_team": data["away_team"], "home_team_id": data.get("home_team_id"), "away_team_id": data.get("away_team_id"),
              "match_id": str(data.get("match_id")) if data.get("match_id") else None, "fthg": hg, "ftag": ag, "ftr": "H" if hg > ag else "A" if ag > hg else "D", "total_goals": hg + ag,
-             "odds_source": "no maximum bookmaker odds"}
+             "odds_source": "no maximum bookmaker odds", "_full_event_details": quality["complete"], "_event_checks": quality["checks"]}
     stats = data.get("stats") or {}
     lineups = data.get("lineups") or {}
     for side, short in [("home", "h"), ("away", "a")]:
@@ -237,16 +239,30 @@ def event_match(data, code, season, cutoff, screener):
     return match
 
 
+def event_paths(root, code, cache=None):
+    """Read primary archives, alternate local FotMob records and approved imports.
+
+    Primary records win a tie; complete alternatives win over partial primary
+    records. Nothing is downloaded or written back to the football project.
+    """
+    paths = sorted((cache / "events" / code).rglob("*.json")) if cache else []
+    if code == "E0":
+        paths += sorted((root / "data" / "match_events_epl_fotmob").rglob("*.json"))
+    directory = COMPETITIONS[code][2]
+    if directory:
+        paths += sorted((root / "data" / directory).rglob("*.json"))
+    return paths
+
+
 def load_events(root, cutoff, screener, cache=None):
-    fingerprint = hashlib.sha256((str(root) + cutoff + inspect.getsource(event_match) + inspect.getsource(last_prematch_price)).encode())
+    fingerprint = hashlib.sha256((str(root) + cutoff + str(EVENT_QUALITY_VERSION) + inspect.getsource(event_match) + inspect.getsource(last_prematch_price) + inspect.getsource(event_quality)).encode())
     all_paths = {}
     for code, (_, _, directory, _) in COMPETITIONS.items():
-        if directory:
-            paths = sorted((root / "data" / directory).rglob("*.json"))
-            all_paths[code] = paths
-            for path in paths:
-                stat = path.stat()
-                fingerprint.update(f"{path}:{stat.st_size}:{stat.st_mtime_ns}".encode())
+        paths = event_paths(root, code, cache)
+        all_paths[code] = paths
+        for path in paths:
+            stat = path.stat()
+            fingerprint.update(f"{path}:{stat.st_size}:{stat.st_mtime_ns}".encode())
     cache_path = cache / f"events-{fingerprint.hexdigest()[:24]}.json.gz" if cache else None
     if cache_path and cache_path.exists():
         with gzip.open(cache_path, "rt", encoding="utf-8") as handle:
@@ -261,7 +277,7 @@ def load_events(root, cutoff, screener, cache=None):
         return matches
     matches = []
     for code, (_, _, directory, _) in COMPETITIONS.items():
-        if directory is None:
+        if not all_paths[code]:
             continue
         paths = all_paths[code]
 
@@ -288,6 +304,9 @@ def load_events(root, cutoff, screener, cache=None):
 def merge_sources(csv_rows, events, fd_names, name_aliases):
     # The event archives mix FotMob and SofaScore IDs. Reconcile documented
     # name aliases rather than assuming the same numeric-ID namespace.
+    # Never allow an incomplete duplicate to replace a complete event record.
+    # Stable sorting preserves primary-source preference for equal quality.
+    events = sorted(events, key=lambda event: bool(event.get("_full_event_details")))
     parents = {}
 
     def find(name):
@@ -382,7 +401,15 @@ def merge_sources(csv_rows, events, fd_names, name_aliases):
         key = (match["league_code"], linked["date"] if linked else match["date"], home, away)
         if key in merged:
             previous = merged[key]
-            previous.update({k: v for k, v in match.items() if v is not None})
+            betfair = dict(previous.get("_betfair", {}))
+            betfair.update({market: pair for market, pair in match.get("_betfair", {}).items() if pair[1] is not None})
+            updates = {k: v for k, v in match.items() if v is not None}
+            if previous.get("_full_event_details") and not match.get("match_id"):
+                # CSVs supply prices, not a replacement for validated event
+                # statistics/identity. Retain the detailed record's inputs.
+                updates = {k: v for k, v in updates.items() if k not in previous or k.startswith(("max_", "avg_")) or k == "odds_source"}
+            previous.update(updates)
+            previous["_betfair"] = betfair
         else:
             merged[key] = dict(match)
         # Stable IDs for CSV-only matches; no position-dependent identifiers.

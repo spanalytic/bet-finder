@@ -43,7 +43,7 @@ export function CompetitionSelector({ competitions, market, selected, onChange }
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button aria-label="Choose competitions" className="h-10 w-full justify-between bg-background/50 text-xs" variant="outline">
-          <span>{selected.length === competitions.length ? "All competitions" : `${selected.length} competitions selected`}</span>
+          <span>{selected.length === competitions.filter((item) => item.matches > 0).length ? "All available competitions" : `${selected.length} competitions selected`}</span>
           <ChevronDown className="size-3.5 text-muted-foreground" />
         </Button>
       </DialogTrigger>
@@ -51,17 +51,17 @@ export function CompetitionSelector({ competitions, market, selected, onChange }
       <DialogContent className="flex max-h-[90dvh] flex-col gap-4 sm:max-w-3xl">
         <DialogHeader className="pr-7">
           <DialogTitle>Choose competitions</DialogTitle>
-          <DialogDescription>Not every league supports every filter. Counts show current-market prices from 2022/23 onwards. Expand a league’s input coverage to see which data is actually available.</DialogDescription>
+          <DialogDescription>Only matches with validated detailed events are available. Leagues without qualifying records are disabled. Weather, player values and rolling-history coverage can still vary.</DialogDescription>
         </DialogHeader>
         <div className="relative">
           <Search className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" />
           <Input aria-label="Search competitions" className="pl-9" onChange={(event) => setSearch(event.target.value)} placeholder="Search by league, country or UCL / UEL / UECL…" value={search} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => onChange(competitions.map((item) => item.name))} size="xs" variant="outline">Select all</Button>
-          <Button onClick={() => onChange(competitions.filter((item) => TOP_FIVE.has(item.code)).map((item) => item.name))} size="xs" variant="outline">Top five only</Button>
-          <Button onClick={() => onChange(competitions.filter((item) => item.kind === "domestic").map((item) => item.name))} size="xs" variant="outline">Domestic only</Button>
-          <Button onClick={() => onChange(competitions.filter((item) => item.kind === "uefa").map((item) => item.name))} size="xs" variant="outline">UEFA only</Button>
+          <Button onClick={() => onChange(competitions.filter((item) => item.matches > 0).map((item) => item.name))} size="xs" variant="outline">Select all available</Button>
+          <Button onClick={() => onChange(competitions.filter((item) => item.matches > 0 && TOP_FIVE.has(item.code)).map((item) => item.name))} size="xs" variant="outline">Top five only</Button>
+          <Button onClick={() => onChange(competitions.filter((item) => item.matches > 0 && item.kind === "domestic").map((item) => item.name))} size="xs" variant="outline">Domestic only</Button>
+          <Button onClick={() => onChange(competitions.filter((item) => item.matches > 0 && item.kind === "uefa").map((item) => item.name))} size="xs" variant="outline">UEFA only</Button>
           <span className="ml-auto text-xs text-muted-foreground" role="status">{selected.length} selected</span>
         </div>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
@@ -77,18 +77,18 @@ export function CompetitionSelector({ competitions, market, selected, onChange }
                     const priced = item.markets[market];
                     return (
                       <div className={cn("rounded-xl border transition-colors hover:bg-secondary/40", checked && "border-primary/25 bg-primary/5")} key={item.code}>
-                        <label className="flex cursor-pointer items-start gap-3 p-3">
-                        <Checkbox aria-label={item.name} checked={checked} className="mt-0.5" onCheckedChange={() => onChange(toggleSelection(selected, item.name))} />
+                        <label className={cn("flex items-start gap-3 p-3", item.matches ? "cursor-pointer" : "cursor-not-allowed opacity-60")}>
+                        <Checkbox aria-label={item.name} checked={checked} disabled={!item.matches} className="mt-0.5" onCheckedChange={() => onChange(toggleSelection(selected, item.name))} />
                         <span className="min-w-0 flex-1">
                           <span className="block text-xs font-medium">{item.name}{kind === "uefa" && <span className="ml-1.5 text-[10px] text-muted-foreground">{item.code}</span>}</span>
-                          <span className="mt-0.5 block text-[11px] text-muted-foreground">{item.country} · {item.matches.toLocaleString()} matches</span>
+                          <span className="mt-0.5 block text-[11px] text-muted-foreground">{item.country} · {item.matches.toLocaleString()} detailed-event matches</span>
                           <span className={cn("mt-1 block text-[11px]", priced ? "text-primary" : "text-muted-foreground")}>{priced ? `${priced.toLocaleString()} with market odds` : "No recorded odds for this market"}{item.betfairMarkets[market] > 0 && ` · ${item.betfairMarkets[market].toLocaleString()} Betfair`}</span>
-                          <span className="mt-1 block text-[10px] leading-4 text-muted-foreground">{item.eventMatches ? `Event files: ${(item.eventMatches / item.matches * 100).toFixed(1)}% of indexed matches` : "Odds & basic form only · no event files"}{item.marketLastDates[market] && ` · Prices to ${displayDate(item.marketLastDates[market])}`}</span>
+                          <span className="mt-1 block text-[10px] leading-4 text-muted-foreground">{item.matches ? `${(item.matches / item.sourceMatches * 100).toFixed(1)}% of known source fixtures pass event checks` : "Unavailable · no complete event records"}{item.marketLastDates[market] && ` · Prices to ${displayDate(item.marketLastDates[market])}`}</span>
                         </span>
                         </label>
                         <details className="border-t border-border/60 px-3 py-2 text-[10px] text-muted-foreground">
                           <summary className="cursor-pointer text-[11px] font-medium">Filter input coverage · {item.name}</summary>
-                          <p className="mt-2 leading-4">Input availability across this league’s indexed matches, not filter hits. Rolling inputs need prior games; the presence of an event file does not imply complete fields.</p>
+                          <p className="mt-2 leading-4">{item.incompleteEventMatches.toLocaleString()} incomplete event records and {item.missingEventMatches.toLocaleString()} fixtures without event records are excluded. Input percentages below refer only to eligible matches, not filter hits. Rolling inputs still need prior games.</p>
                           <dl className="mt-2 space-y-1.5">{Object.entries(item.featureCounts).map(([feature, count]) => <div className="flex justify-between gap-3" key={feature}><dt>{feature}</dt><dd className="shrink-0 tabular-nums">{count ? `${(count / item.matches * 100).toFixed(1)}%` : "Unavailable"}</dd></div>)}</dl>
                         </details>
                       </div>

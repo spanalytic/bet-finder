@@ -19,8 +19,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable} dark h-full`}
+      className={`${GeistSans.variable} ${GeistMono.variable} h-full`}
+      suppressHydrationWarning
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{document.documentElement.classList.toggle("dark",localStorage.getItem("bet-finder:theme:v1")==="dark")}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="min-h-full antialiased">
         <TooltipProvider>{children}</TooltipProvider>
       </body>

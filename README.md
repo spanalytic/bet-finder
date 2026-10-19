@@ -1,6 +1,8 @@
 # Bet Finder
 
-A desktop-first local prototype for building and backtesting pre-match football betting strategies.
+A desktop-first website for building and backtesting pre-match football betting strategies.
+
+Live website: [Bet Finder](https://spanalytic.github.io/bet-finder/).
 
 ## Included in the first draft
 
@@ -12,6 +14,7 @@ A desktop-first local prototype for building and backtesting pre-match football 
 - ROI, profit, strike rate, average odds, maximum drawdown and 95% confidence intervals.
 - Season and league breakdowns, cumulative profit curve and recent qualifying matches.
 - Browser-local named strategy saving.
+- Light and dark themes, with light as the default and your choice remembered in this browser.
 - Completed seasons selected by default; the current season is explicit opt-in.
 
 ## Run locally
@@ -23,12 +26,13 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-For a production-mode local run:
+To build the production website:
 
 ```powershell
 npm run build
-npm start
 ```
+
+The build writes static files to `out/`; GitHub Pages serves these files for the live website.
 
 ## Rebuild the data weekly
 

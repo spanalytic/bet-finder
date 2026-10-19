@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Database, Info, Loader2, LockKeyhole, SearchX, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, ChevronDown, Info, Loader2, LockKeyhole, SearchX } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -43,23 +43,19 @@ function MetricCard({
   tone?: "positive" | "negative" | "neutral";
 }) {
   return (
-    <Card className="gap-3 border-border/80 bg-card/80 py-4 shadow-none">
-      <CardHeader className="px-4">
-        <CardDescription className="text-[11px] font-medium uppercase tracking-[0.12em]">
-          {label}
-        </CardDescription>
-        <CardTitle
-          className={cn(
-            "metric-number text-2xl font-medium tracking-[-0.04em]",
-            tone === "positive" && "text-primary",
-            tone === "negative" && "text-destructive",
-          )}
-        >
-          {value}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 text-xs text-muted-foreground">{detail}</CardContent>
-    </Card>
+    <div className="min-w-0 p-5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "mt-2 text-[28px] font-medium leading-tight tracking-[-0.045em] tabular-nums",
+          tone === "positive" && "text-primary",
+          tone === "negative" && "text-destructive",
+        )}
+      >
+        {value}
+      </p>
+      <p className="mt-2 text-[11px] leading-4 text-muted-foreground">{detail}</p>
+    </div>
   );
 }
 
@@ -73,8 +69,8 @@ function ProfitCurve({ points }: { points: BacktestResponse["equityCurve"] }) {
   }
 
   const width = 920;
-  const height = 220;
-  const padding = 18;
+  const height = 260;
+  const padding = 8;
   const profits = points.map((point) => point.profit);
   const minimum = Math.min(0, ...profits);
   const maximum = Math.max(0, ...profits);
@@ -83,21 +79,33 @@ function ProfitCurve({ points }: { points: BacktestResponse["equityCurve"] }) {
   const y = (profit: number) => padding + ((maximum - profit) / range) * (height - padding * 2);
   const path = points.map((point, index) => `${x(index)},${y(point.profit)}`).join(" ");
   const zeroY = y(0);
+  const positive = (points.at(-1)?.profit ?? 0) >= 0;
+  const curveColor = positive ? "var(--primary)" : "var(--destructive)";
 
   return (
-    <div>
+    <div className="pt-3">
+      <div className="flex gap-4">
+      <div className="flex w-12 shrink-0 flex-col justify-between pb-1 text-right text-[10px] tabular-nums text-muted-foreground" aria-hidden="true">
+        <span>{maximum.toFixed(0)}u</span>
+        <span>{((maximum + minimum) / 2).toFixed(0)}u</span>
+        <span>{minimum.toFixed(0)}u</span>
+      </div>
       <svg
         aria-label="Chronological cumulative profit curve"
-        className="h-52 w-full overflow-visible"
+        className="h-[240px] min-w-0 flex-1 overflow-visible sm:h-[270px]"
+        preserveAspectRatio="none"
         role="img"
         viewBox={`0 0 ${width} ${height}`}
       >
         <defs>
           <linearGradient id="profit-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.24" />
-            <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+            <stop offset="0%" stopColor={curveColor} stopOpacity="0.15" />
+            <stop offset="100%" stopColor={curveColor} stopOpacity="0.01" />
           </linearGradient>
         </defs>
+        {[maximum, (maximum + minimum) / 2, minimum].map((value, index) => (
+          <line key={index} stroke="var(--border)" strokeOpacity="0.5" x1={padding} x2={width - padding} y1={y(value)} y2={y(value)} />
+        ))}
         <line
           stroke="var(--border)"
           strokeDasharray="5 5"
@@ -114,13 +122,15 @@ function ProfitCurve({ points }: { points: BacktestResponse["equityCurve"] }) {
         <polyline
           fill="none"
           points={path}
-          stroke="var(--primary)"
+          stroke={curveColor}
           strokeLinecap="round"
           strokeLinejoin="round"
-          strokeWidth="2.4"
+          strokeWidth="2"
+          vectorEffect="non-scaling-stroke"
         />
       </svg>
-      <div className="metric-number flex justify-between text-[11px] text-muted-foreground">
+      </div>
+      <div className="mt-4 ml-16 flex justify-between text-[10px] tabular-nums text-muted-foreground">
         <span>{shortDate(points[0].date)}</span>
         <span>{shortDate(points.at(-1)?.date ?? points[0].date)}</span>
       </div>
@@ -130,22 +140,22 @@ function ProfitCurve({ points }: { points: BacktestResponse["equityCurve"] }) {
 
 function BreakdownTable({ rows }: { rows: BreakdownRow[] }) {
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <div className="overflow-x-auto rounded-xl border border-border/80 bg-card">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/35">
-            <TableHead>Segment</TableHead>
+            <TableHead className="pl-5">Segment</TableHead>
             <TableHead className="text-right">Bets</TableHead>
             <TableHead className="text-right">Win rate</TableHead>
             <TableHead className="text-right">Avg odds</TableHead>
             <TableHead className="text-right">Profit</TableHead>
-            <TableHead className="text-right">ROI</TableHead>
+            <TableHead className="pr-5 text-right">ROI</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.label}>
-              <TableCell className="font-medium">{row.label}</TableCell>
+              <TableCell className="py-4 pl-5 font-medium">{row.label}</TableCell>
               <TableCell className="metric-number text-right">{row.bets}</TableCell>
               <TableCell className="metric-number text-right">{row.winRate.toFixed(1)}%</TableCell>
               <TableCell className="metric-number text-right">{row.averageOdds.toFixed(2)}</TableCell>
@@ -159,7 +169,7 @@ function BreakdownTable({ rows }: { rows: BreakdownRow[] }) {
               </TableCell>
               <TableCell
                 className={cn(
-                  "metric-number text-right",
+                  "metric-number pr-5 text-right",
                   row.roi > 0 ? "text-primary" : row.roi < 0 ? "text-destructive" : "",
                 )}
               >
@@ -176,8 +186,9 @@ function BreakdownTable({ rows }: { rows: BreakdownRow[] }) {
 function LoadingState() {
   return (
     <div className="space-y-5" aria-label="Calculating backtest">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {Array.from({ length: 6 }, (_, index) => (
+      <Skeleton className="h-6 w-40" />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
           <Skeleton className="h-28 rounded-xl" key={index} />
         ))}
       </div>
@@ -235,20 +246,36 @@ export function ResultsPanel({ result, loading, error, onRetry }: ResultsPanelPr
   }
 
   return (
-    <div className={cn("space-y-5 transition-opacity", loading && "opacity-55")}>
+    <div className={cn("space-y-4 transition-opacity", loading && "opacity-55")} aria-busy={loading}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[15px] font-semibold">Backtest results</h2>
+        <span className="flex items-center gap-2 text-[11px] text-muted-foreground" role="status">
+          {loading ? <Loader2 className="size-3 animate-spin" /> : <span className="size-1.5 rounded-full bg-primary" />}
+          {loading ? "Updating results…" : "Updates automatically"}
+        </span>
+      </div>
       {baseline && (
-        <Alert>
-          <Info />
-          <AlertTitle>Whole-market baseline</AlertTitle>
-          <AlertDescription>
-            No filters are selected, so this shows every match in the chosen leagues and seasons. Pick one or two filters on the left to test a strategy against this baseline.
-          </AlertDescription>
-        </Alert>
+        <div className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+          <Info className="mt-0.5 size-3.5 shrink-0" />
+          <p>All matches in your selection. Add a filter to test your strategy.</p>
+        </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border/80 bg-card xl:grid-cols-4 [&>div:nth-child(even)]:border-l [&>div:nth-child(n+3)]:border-t xl:[&>div:nth-child(n+2)]:border-l xl:[&>div:nth-child(n+3)]:border-t-0">
         <MetricCard
-          detail={`${result.qualifyingMatches.toLocaleString()} matches passed the screen`}
+          detail="Flat stakes · one unit per bet"
+          label="Net profit"
+          tone={metrics.profit > 0 ? "positive" : metrics.profit < 0 ? "negative" : "neutral"}
+          value={signed(metrics.profit, "u")}
+        />
+        <MetricCard
+          detail="Return on total stakes"
+          label="Return on investment"
+          tone={metrics.roi > 0 ? "positive" : metrics.roi < 0 ? "negative" : "neutral"}
+          value={signed(metrics.roi, "%")}
+        />
+        <MetricCard
+          detail={`${result.qualifyingMatches.toLocaleString()} matches qualified`}
           label="Settled bets"
           value={metrics.bets.toLocaleString()}
         />
@@ -257,103 +284,53 @@ export function ResultsPanel({ result, loading, error, onRetry }: ResultsPanelPr
           label="Strike rate"
           value={`${metrics.winRate.toFixed(1)}%`}
         />
-        <MetricCard
-          detail={metrics.roiCi ? `95% CI ${signed(metrics.roiCi[0], "%")} to ${signed(metrics.roiCi[1], "%")}` : "Insufficient sample"}
-          label="ROI"
-          tone={metrics.roi > 0 ? "positive" : metrics.roi < 0 ? "negative" : "neutral"}
-          value={signed(metrics.roi, "%")}
-        />
-        <MetricCard
-          detail="At one unit per settled bet"
-          label="Net profit"
-          tone={metrics.profit > 0 ? "positive" : metrics.profit < 0 ? "negative" : "neutral"}
-          value={signed(metrics.profit, "u")}
-        />
-        <MetricCard
-          detail="Maximum closing price"
-          label="Average odds"
-          value={metrics.averageOdds.toFixed(2)}
-        />
-        <MetricCard
-          detail="Peak-to-trough, chronological"
-          label="Max drawdown"
-          tone={metrics.maxDrawdown > 0 ? "negative" : "neutral"}
-          value={`−${metrics.maxDrawdown.toFixed(1)}u`}
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {loading && (
-          <Badge className="gap-1.5" variant="outline">
-            <Loader2 className="size-3 animate-spin" /> Updating…
-          </Badge>
-        )}
-        <Badge variant="outline">
-          {result.qualifyingMatches.toLocaleString()} of {result.poolMatches.toLocaleString()} matches
-        </Badge>
-        {!baseline && (
-          <Badge variant="outline">
-            {totalFilters} filter{totalFilters === 1 ? "" : "s"} in {ruleGroups.length} group{ruleGroups.length === 1 ? "" : "s"}
-          </Badge>
-        )}
-        {result.missingOdds > 0 && (
-          <Badge variant="secondary">{result.missingOdds} missing market prices</Badge>
-        )}
-        {result.enrichmentCoverage !== null && (
-          <Badge variant="secondary">
-            <Database data-icon="inline-start" />
-            {result.enrichmentCoverage}% event-data coverage
-          </Badge>
-        )}
-        {smallSample && <Badge variant="destructive">Below {result.query.minBets} bet minimum</Badge>}
       </div>
 
       <Tabs defaultValue="overview">
-        <div className="overflow-x-auto pb-1.5">
-          <TabsList variant="line">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="seasons">By season</TabsTrigger>
-            <TabsTrigger value="leagues">By league</TabsTrigger>
-            <TabsTrigger value="matches">Qualifying matches</TabsTrigger>
-            <TabsTrigger value="holdout">
-              <LockKeyhole data-icon="inline-start" /> Holdout
-            </TabsTrigger>
-          </TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="max-w-full overflow-x-auto pb-1">
+            <TabsList className="h-9 gap-1 bg-transparent p-0">
+              <TabsTrigger className="px-3 text-xs data-[state=active]:bg-secondary!" value="overview">Overview</TabsTrigger>
+              <TabsTrigger className="px-3 text-xs data-[state=active]:bg-secondary!" value="seasons">By season</TabsTrigger>
+              <TabsTrigger className="px-3 text-xs data-[state=active]:bg-secondary!" value="leagues">By league</TabsTrigger>
+              <TabsTrigger className="px-3 text-xs data-[state=active]:bg-secondary!" value="matches">Matches</TabsTrigger>
+              <TabsTrigger className="px-3 text-xs data-[state=active]:bg-secondary!" value="holdout">
+                <LockKeyhole className="size-3" /> Holdout
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          {smallSample && <Badge className="mb-1 text-[10px]" variant="destructive">Small sample · below {result.query.minBets} bets</Badge>}
         </div>
 
-        <TabsContent className="mt-4 space-y-4" value="overview">
-          <Card className="border-border/80 bg-card/70 shadow-none">
-            <CardHeader>
-              <div className="flex items-start justify-between gap-6">
+        <TabsContent className="mt-2 space-y-4" value="overview">
+          <Card className="gap-5 rounded-2xl border border-border/80 bg-card pt-6 pb-0 shadow-none ring-0">
+            <CardHeader className="px-5 sm:px-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <CardTitle className="text-lg font-medium tracking-tight">Cumulative one-unit profit</CardTitle>
-                  <CardDescription>Settled chronologically across the selected competitions.</CardDescription>
+                  <CardTitle className="text-sm font-medium">Profit over time</CardTitle>
+                  <CardDescription className="mt-1 text-xs">Cumulative returns, settled in match order.</CardDescription>
                 </div>
-                <div
-                  className={cn(
-                    "flex items-center gap-1.5 text-sm font-medium",
-                    metrics.profit >= 0 ? "text-primary" : "text-destructive",
-                  )}
-                >
-                  {metrics.profit >= 0 ? <TrendingUp /> : <TrendingDown />}
-                  {signed(metrics.profit, " units")}
-                </div>
+                <span className="flex items-center gap-2 text-[11px] text-muted-foreground"><span className={cn("h-0.5 w-4 rounded-full", metrics.profit >= 0 ? "bg-primary" : "bg-destructive")} /> Net profit (units)</span>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 pb-2 sm:px-6">
               <ProfitCurve points={result.equityCurve} />
             </CardContent>
+            <div className="grid grid-cols-2 border-t border-border/70 bg-background/20 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 sm:px-6"><span className="text-muted-foreground">Average odds</span><span className="tabular-nums">{metrics.averageOdds.toFixed(2)}</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-l border-border/70 px-5 py-4 sm:px-6"><span className="text-muted-foreground">Max drawdown</span><span className="tabular-nums">−{metrics.maxDrawdown.toFixed(1)}u</span></div>
+            </div>
           </Card>
 
-          <Alert>
-            <Info />
-            <AlertTitle>{confidenceCrossesZero ? "The edge is not yet conclusive" : "Confidence range"}</AlertTitle>
-            <AlertDescription>
-              {metrics.roiCi
-                ? `The estimated 95% ROI interval is ${signed(metrics.roiCi[0], "%")} to ${signed(metrics.roiCi[1], "%")}. This describes sampling uncertainty, not a guarantee of future returns.`
-                : "Add more settled bets before treating the result as evidence of an edge."}
-            </AlertDescription>
-          </Alert>
+          <div className="flex items-start gap-3 rounded-xl border border-border/70 px-4 py-4">
+            <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div className="text-xs leading-5">
+              <p className="font-medium">{confidenceCrossesZero ? "The edge is not yet conclusive" : "Understanding this result"}</p>
+              <p className="mt-1 text-muted-foreground">{metrics.roiCi
+                ? <>Estimated 95% ROI range: <span className="text-foreground">{signed(metrics.roiCi[0], "%")} to {signed(metrics.roiCi[1], "%")}</span>. This measures sampling uncertainty, not future returns.</>
+                : "More settled bets are needed to estimate a confidence range."}</p>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent className="mt-4" value="seasons">
@@ -365,7 +342,7 @@ export function ResultsPanel({ result, loading, error, onRetry }: ResultsPanelPr
         </TabsContent>
 
         <TabsContent className="mt-4" value="matches">
-          <div className="overflow-x-auto rounded-lg border">
+          <div className="overflow-x-auto rounded-xl border border-border/80 bg-card">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/35">
@@ -425,6 +402,18 @@ export function ResultsPanel({ result, loading, error, onRetry }: ResultsPanelPr
           </Card>
         </TabsContent>
       </Tabs>
+
+      <details className="group border-t border-border/70 pt-4 text-xs text-muted-foreground">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+          <span>{result.qualifyingMatches.toLocaleString()} of {result.poolMatches.toLocaleString()} matches qualify <span className="mx-1 text-border">·</span> Data & methodology</span>
+          <ChevronDown className="size-3.5 shrink-0 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="mt-3 space-y-1.5 leading-5">
+          <p>{totalFilters} selected filter{totalFilters === 1 ? "" : "s"} across {ruleGroups.length} group{ruleGroups.length === 1 ? "" : "s"}. Groups use AND; filters within each group use OR.</p>
+          <p>{result.missingOdds.toLocaleString()} qualifying matches excluded for missing market odds.{result.enrichmentCoverage !== null && ` Event-data coverage: ${result.enrichmentCoverage}%.`}</p>
+          <p>Maximum historical closing odds, one-unit stakes and no commission. Available prices may have been lower in practice. Trying many combinations can produce attractive results by chance.</p>
+        </div>
+      </details>
     </div>
   );
 }

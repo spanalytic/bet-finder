@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Bookmark,
+  Check,
+  ChevronDown,
   Database,
-  FlaskConical,
   Info,
   Plus,
   RotateCcw,
@@ -17,8 +18,8 @@ import {
 } from "lucide-react";
 
 import { ResultsPanel } from "@/components/results-panel";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +36,6 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { runBacktest } from "@/lib/backtest-engine";
 import type {
   BacktestIndex,
@@ -366,33 +366,20 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b bg-background/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-[1800px] items-center justify-between gap-3 px-4 md:px-6">
+      <a className="skip-link" href="#strategy-workspace">Skip to strategy builder</a>
+      <header className="border-b border-border/70 bg-card/60">
+        <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between gap-3 px-4 md:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_0_28px_-8px_var(--primary)]">
-              <Target className="size-4" />
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+              <Target className="size-5" />
             </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold tracking-tight">Bet Finder</div>
-              <div className="truncate text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Pre-match research</div>
-            </div>
-            <Separator className="mx-3 hidden h-6 md:block" orientation="vertical" />
-            <nav className="hidden items-center gap-1 text-sm md:flex">
-              <Button className="text-foreground" size="sm" variant="ghost">Strategy builder</Button>
-              <Button disabled size="sm" variant="ghost">
-                Saved portfolios <span className="text-[9px] uppercase text-muted-foreground">soon</span>
-              </Button>
-              <Button disabled size="sm" variant="ghost">
-                Upcoming matches <span className="text-[9px] uppercase text-muted-foreground">soon</span>
-              </Button>
-            </nav>
+            <span className="truncate text-base font-semibold tracking-tight">Bet Finder<span className="text-primary">.</span></span>
+            <span className="mx-3 hidden text-border md:inline" aria-hidden="true">/</span>
+            <span className="hidden text-sm text-muted-foreground md:inline">Strategy workspace</span>
           </div>
-
           <div className="flex shrink-0 items-center gap-2">
-            <Badge className="hidden gap-1.5 lg:inline-flex" variant="outline">
-              <Database className="size-3" /> {meta.matchCount.toLocaleString()} indexed matches
-            </Badge>
-            <Button onClick={() => setStrategiesDialogOpen(true)} size="sm" variant="outline">
+            <ThemeToggle />
+            <Button onClick={() => setStrategiesDialogOpen(true)} size="sm" variant="outline" className="bg-transparent">
               <Bookmark data-icon="inline-start" /> My strategies
               {savedStrategies.length > 0 && (
                 <span className="metric-number text-[10px] text-muted-foreground">{savedStrategies.length}</span>
@@ -402,42 +389,29 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1800px] px-4 py-6 md:px-6">
+      <main id="strategy-workspace" className="mx-auto max-w-[1600px] px-4 py-6 md:px-8 md:py-7">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="mb-2 flex items-center gap-2">
-              <Badge variant="secondary">Local first draft</Badge>
-              <span className="metric-number text-[11px] text-muted-foreground">Index rebuilt {generatedDate}</span>
-            </div>
-            <h1 className="text-3xl font-medium tracking-[-0.045em]">Build a pre-match strategy</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Combine up to five signals into AND + OR rules. A match must pass every group, and it passes a group when any filter inside it applies.
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-primary">Pre-match research</p>
+            <h1 className="text-[28px] font-semibold tracking-[-0.045em] md:text-[30px]">Strategy builder</h1>
+            <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
+              Find a signal. Build your rules. Explore the results.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={resetStrategy} variant="ghost">
-              <RotateCcw data-icon="inline-start" /> Reset
+          <div className="flex items-center gap-3">
+            <span className="hidden text-xs text-muted-foreground xl:inline">Updated {generatedDate}</span>
+            <Button onClick={resetStrategy} variant="ghost" size="sm" className="text-muted-foreground">
+              <RotateCcw data-icon="inline-start" /> Reset setup
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[390px_minmax(0,1fr)]">
-          <aside className="space-y-4">
-            <Card className="gap-4 border-border/80 bg-card/80 py-4 shadow-none">
-              <CardHeader className="px-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-base font-medium">
-                    <SlidersHorizontal className="size-4 text-primary" /> Strategy setup
-                  </CardTitle>
-                  <Badge variant="outline">AND + OR</Badge>
-                </div>
-                <CardDescription>Groups combine with AND; filters inside a group combine with OR.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5 px-4">
-                <div className="space-y-2">
-                  <Label htmlFor="market">Bet market</Label>
+        <section aria-label="Backtest settings" className="mb-7 rounded-2xl border border-border/80 bg-card">
+          <div className="grid divide-y divide-border/70 sm:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[minmax(180px,0.8fr)_minmax(300px,1.5fr)_minmax(250px,1.2fr)] lg:divide-x lg:divide-y-0">
+                <div className="space-y-3 p-5">
+                  <Label className="text-xs text-muted-foreground" htmlFor="market">01 <span className="ml-1.5 text-foreground">Bet market</span></Label>
                   <Select value={market} onValueChange={(value) => setMarket(value as MarketId)}>
-                    <SelectTrigger className="w-full" id="market">
+                    <SelectTrigger className="h-10 w-full bg-background/50" id="market">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -448,9 +422,9 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                   </Select>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="space-y-3 p-5 sm:border-t-0 sm:border-l lg:border-l-0">
                   <div className="flex items-center justify-between">
-                    <Label>Leagues</Label>
+                    <span className="text-xs text-muted-foreground">02 <span className="ml-1.5 text-foreground" id="leagues-label">Leagues</span></span>
                     {selectedLeagues.length < allLeagues.length ? (
                       <Button
                         className="h-auto px-1.5 py-0.5 text-[11px]"
@@ -461,16 +435,16 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                         Select all
                       </Button>
                     ) : (
-                      <span className="text-[11px] text-muted-foreground">Top five</span>
+                      <span className="text-[11px] text-muted-foreground">All five selected</span>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div role="group" aria-labelledby="leagues-label" className="flex flex-wrap gap-1.5">
                     {allLeagues.map((league) => {
                       const selected = selectedLeagues.includes(league);
                       return (
                         <Button
                           aria-pressed={selected}
-                          className={cn("justify-start", selected && "border-primary/40 bg-primary/10 text-primary")}
+                          className={cn("h-9 gap-1.5 rounded-lg border-transparent bg-secondary/60 px-2.5 text-xs text-muted-foreground hover:bg-secondary", selected && "border-primary/20 bg-primary/8 text-foreground")}
                           key={league}
                           onClick={() =>
                             toggleRequiredSelection(league, selectedLeagues, setSelectedLeagues)
@@ -478,26 +452,26 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                           size="sm"
                           variant="outline"
                         >
-                          {league}
+                          {selected && <Check className="size-3 text-primary" />} {league}
                         </Button>
                       );
                     })}
                   </div>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="space-y-3 p-5 sm:col-span-2 lg:col-span-1">
                   <div className="flex items-center justify-between">
-                    <Label>Seasons</Label>
+                    <span className="text-xs text-muted-foreground">03 <span className="ml-1.5 text-foreground" id="seasons-label">Seasons</span></span>
                     <span className="text-[11px] text-muted-foreground">Current season is opt-in</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div role="group" aria-labelledby="seasons-label" className="flex flex-wrap gap-1.5">
                     {meta.availableSeasons.map((season) => {
                       const selected = selectedSeasons.includes(season);
                       const current = season === meta.currentSeason;
                       return (
                         <Button
                           aria-pressed={selected}
-                          className={cn("justify-between", selected && "border-primary/40 bg-primary/10 text-primary")}
+                          className={cn("h-9 gap-1.5 rounded-lg border-transparent bg-secondary/60 px-2.5 text-xs text-muted-foreground hover:bg-secondary", selected && "border-primary/20 bg-primary/8 text-foreground")}
                           key={season}
                           onClick={() =>
                             toggleRequiredSelection(season, selectedSeasons, setSelectedSeasons)
@@ -505,16 +479,28 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                           size="sm"
                           variant="outline"
                         >
+                          {selected && <Check className="size-3 text-primary" />}
                           {season.replace("20", "").replace("-20", "/")}
-                          {current && <span className="text-[9px] uppercase">live</span>}
+                          {current && <span className="size-1.5 rounded-full bg-primary" aria-label="Current season" />}
                         </Button>
                       );
                     })}
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="min-bets">Small-sample threshold</Label>
+          </div>
+          <div className="flex flex-wrap items-start justify-between gap-3 border-t border-border/70 px-5 py-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[11px] text-muted-foreground">
+              <span className="flex items-center gap-2"><Database className="size-3.5" /> {meta.matchCount.toLocaleString()} matches available</span>
+              <span>Maximum closing odds</span>
+              <span>1u flat stake</span>
+            </div>
+            <details className="group w-full text-xs sm:w-auto sm:max-w-xs">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-muted-foreground hover:text-foreground">
+                <SlidersHorizontal className="size-3.5" /> Sample settings <ChevronDown className="ml-auto size-3 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="mt-4 space-y-2 pb-2">
+                  <Label className="text-xs" htmlFor="min-bets">Small-sample threshold</Label>
                   <Input
                     id="min-bets"
                     max={10000}
@@ -524,16 +510,19 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                     value={minBets}
                   />
                   <p className="text-[11px] leading-4 text-muted-foreground">
-                    Results with fewer settled bets than this are flagged as too small to trust.
+                    Results below this number of settled bets receive a small-sample flag.
                   </p>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </details>
+          </div>
+        </section>
 
-            <Card className="gap-3 border-border/80 bg-card/80 py-4 shadow-none">
-              <CardHeader className="px-4">
+        <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[290px_minmax(0,1fr)] lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)]">
+          <aside aria-label="Strategy rules" className="min-w-0">
+            <Card className="gap-0 rounded-2xl border border-border/80 bg-card py-0 shadow-none ring-0">
+              <CardHeader className="gap-2 border-b border-border/70 px-5 py-5">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-medium">Rule builder</CardTitle>
+                  <CardTitle className="text-[15px] font-semibold">Your filters</CardTitle>
                   <div className="flex items-center gap-2">
                     {flatFilters.length > 0 && (
                       <Button
@@ -548,48 +537,49 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                         Clear all
                       </Button>
                     )}
-                    <span className="metric-number text-xs text-muted-foreground">
-                      {flatFilters.length}/{meta.maxFilters}
+                    <span className="rounded-md bg-secondary px-2 py-1 text-[11px] text-muted-foreground">
+                      {flatFilters.length} / {meta.maxFilters}
                     </span>
                   </div>
                 </div>
-                <CardDescription>
-                  Tick filters to add them to the highlighted group. Add an AND group to require another condition.
+                <CardDescription className="text-xs leading-5">
+                  Start with one or two signals. Add up to five.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3 px-4">
+              <CardContent className="space-y-4 px-5 pt-4 pb-5">
                 {filterGroups.length > 0 && (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {filterGroups.map((group, index) => {
                       const isActive = index === currentActiveGroup;
                       return (
                         <div key={index}>
                           {index > 0 && (
-                            <div className="py-0.5 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                              and
+                            <div className="flex items-center gap-2 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                              <span className="h-px flex-1 bg-border" /> and <span className="h-px flex-1 bg-border" />
                             </div>
                           )}
                           <div
                             className={cn(
-                              "cursor-pointer rounded-lg border p-2 transition-colors",
+                              "rounded-xl border p-3 transition-colors",
                               isActive
-                                ? "border-primary/50 bg-primary/5"
-                                : "border-border/80 hover:border-muted-foreground/40",
+                                ? "border-primary/30 bg-primary/4"
+                                : "border-border/80",
                             )}
-                            onClick={() => setActiveGroup(index)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") setActiveGroup(index);
-                            }}
-                            role="button"
-                            tabIndex={0}
                           >
-                            <div className="mb-1 flex items-center justify-between">
-                              <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                                Group {index + 1} · match any{isActive && " · adding here"}
-                              </span>
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <button
+                                aria-label={`Add filters to group ${index + 1}`}
+                                aria-pressed={isActive}
+                                className="flex flex-1 items-center justify-between gap-2 rounded-sm text-left text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                                onClick={() => setActiveGroup(index)}
+                                type="button"
+                              >
+                                <span>Group {index + 1} <span className="font-normal">· match any</span></span>
+                                {isActive && <span className="text-[10px] font-normal text-primary">Adding here</span>}
+                              </button>
                               <Button
                                 aria-label={`Remove group ${index + 1}`}
-                                className="-mr-1 size-4 rounded-full p-0 hover:bg-foreground/10"
+                                className="-mr-1 size-6 rounded-md p-0 hover:bg-foreground/10"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   removeGroup(index);
@@ -611,7 +601,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                                   {filterIndex > 0 && (
                                     <span className="text-[9px] font-semibold uppercase text-muted-foreground">or</span>
                                   )}
-                                  <Badge className="h-auto gap-1 py-1" variant="secondary">
+                                  <Badge className="h-auto max-w-full gap-1 rounded-md bg-secondary/80 py-1 text-[11px] font-normal" variant="secondary">
                                     {filtersById.get(id)?.label ?? id}
                                     <Button
                                       aria-label={`Remove ${filtersById.get(id)?.label ?? id}`}
@@ -636,43 +626,47 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                   </div>
                 )}
 
+                {filterGroups.length > 0 && (
                 <Button
-                  className="w-full"
+                  className="w-full border-dashed bg-transparent text-xs text-muted-foreground"
                   disabled={capReached}
                   onClick={addAndGroup}
                   size="sm"
                   variant="outline"
                 >
-                  <Plus data-icon="inline-start" /> {filterGroups.length ? "Add AND group" : "Start a rule"}
+                  <Plus data-icon="inline-start" /> Add AND group
                 </Button>
+                )}
 
                 {ruleSummary && (
-                  <p className="metric-number rounded-lg bg-muted/40 px-2.5 py-2 text-[11px] leading-4 text-muted-foreground">
-                    {ruleSummary}
+                  <p className="sr-only" aria-live="polite">
+                    Current rule: {ruleSummary}
                   </p>
                 )}
 
+                <details className="group text-[11px] text-muted-foreground">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 hover:text-foreground"><Info className="size-3.5" /> How do groups work? <ChevronDown className="ml-auto size-3 group-open:rotate-180" /></summary>
+                  <p className="mt-2 leading-5">A match must pass every group (AND). Within a group, any one filter can match (OR). Select a group heading to add filters to it.</p>
+                </details>
+
                 {capReached && (
-                  <Alert>
-                    <Info />
-                    <AlertDescription>
-                      Filter limit reached ({meta.maxFilters} across all groups) — remove one to try a different signal.
-                    </AlertDescription>
-                  </Alert>
+                  <p className="rounded-lg bg-secondary p-3 text-xs leading-5 text-muted-foreground" role="status">
+                    All {meta.maxFilters} filters are in use. Remove one to try another signal.
+                  </p>
                 )}
 
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     aria-label="Search filters"
-                    className="pl-8"
+                    className="h-10 border-border/80 bg-background/50 pl-9 text-xs"
                     onChange={(event) => setFilterSearch(event.target.value)}
                     placeholder={`Search ${meta.filterCount} filters…`}
                     value={filterSearch}
                   />
                 </div>
 
-                <ScrollArea className="h-[420px] pr-3 lg:h-[650px]">
+                <ScrollArea className="h-[420px] pr-3 lg:h-[480px]">
                   {filteredCategories.length ? (
                     <Accordion
                       onValueChange={(value) => {
@@ -683,10 +677,10 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                     >
                       {filteredCategories.map(([category, categoryFilters]) => (
                         <AccordionItem key={category} value={category}>
-                          <AccordionTrigger className="text-xs">
-                            <span className="flex items-center gap-2">
+                          <AccordionTrigger className="py-3.5 text-xs font-normal hover:no-underline">
+                            <span className="flex items-center gap-2.5">
                               {category}
-                              <span className="metric-number text-[10px] text-muted-foreground">
+                              <span className="text-[10px] text-muted-foreground/70">
                                 {categoryFilters.length}
                               </span>
                               {!searching &&
@@ -702,7 +696,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                               return (
                                 <label
                                   className={cn(
-                                    "flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-muted/60",
+                                    "flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-3 transition-colors hover:bg-muted/60",
                                     selected && "bg-primary/8",
                                     disabled && "cursor-not-allowed opacity-45",
                                   )}
@@ -710,6 +704,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                                   key={filter.id}
                                 >
                                   <Checkbox
+                                    className="mt-0.5"
                                     checked={selected}
                                     disabled={disabled}
                                     id={filter.id}
@@ -718,20 +713,12 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                                   <span className="min-w-0 flex-1">
                                     <span className="flex items-center gap-1.5 text-xs font-medium leading-4">
                                       {filter.label}
-                                      {filter.requiresJson && (
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Database className="size-3 shrink-0 text-muted-foreground" />
-                                          </TooltipTrigger>
-                                          <TooltipContent>Requires match-event enrichment</TooltipContent>
-                                        </Tooltip>
-                                      )}
                                     </span>
                                     <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
                                       {filter.description}
                                     </span>
                                   </span>
-                                  <span className="metric-number text-[10px] text-muted-foreground">
+                                  <span title="Matching games across all indexed history" className="pt-0.5 text-[10px] text-muted-foreground/70">
                                     {filter.matches.toLocaleString()}
                                   </span>
                                 </label>
@@ -749,14 +736,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
             </Card>
           </aside>
 
-          <section className="min-w-0 space-y-4">
-            <Alert className="border-primary/20 bg-primary/5">
-              <FlaskConical className="text-primary" />
-              <AlertTitle>Research result, not a prediction</AlertTitle>
-              <AlertDescription>
-                Results use maximum historical closing odds and flat one-unit stakes. Testing many combinations can produce attractive results by chance; confidence intervals help, but do not remove that risk.
-              </AlertDescription>
-            </Alert>
+          <section aria-label="Backtest results" className="min-w-0">
             <ResultsPanel
               error={error}
               loading={loading}
@@ -767,10 +747,10 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
         </div>
       </main>
 
-      <footer className="mt-10 border-t">
-        <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-2 px-4 py-5 text-xs text-muted-foreground md:px-6">
-          <span>Bet Finder · historical research only · 18+</span>
-          <span>Data licensing must be confirmed before public launch.</span>
+      <footer className="mt-3 border-t border-border/60">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-start justify-between gap-4 px-4 py-6 text-[11px] leading-5 text-muted-foreground md:px-8">
+          <span className="shrink-0">Bet Finder · Historical research · 18+</span>
+          <p className="max-w-2xl md:text-right">Historical returns do not predict future results. Testing many combinations can find apparent edges by chance. Data licensing must be confirmed before public launch.</p>
         </div>
       </footer>
 

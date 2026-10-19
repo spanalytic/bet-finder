@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Bookmark,
-  Check,
   ChevronDown,
   Database,
   Info,
@@ -18,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { ResultsPanel } from "@/components/results-panel";
+import { CompetitionSelector, SeasonSelector } from "@/components/scope-selectors";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
@@ -135,6 +135,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
   const [filterGroups, setFilterGroups] = useState<string[][]>([]);
   const [orTargetGroup, setOrTargetGroup] = useState<number | null>(null);
   const [minBets, setMinBets] = useState(100);
+  const [betfairCommission, setBetfairCommission] = useState(5);
   const [filterSearch, setFilterSearch] = useState("");
   const [openCategories, setOpenCategories] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -180,6 +181,9 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
           if (typeof saved.minBets === "number") {
             setMinBets(Math.min(Math.max(saved.minBets, 10), 10_000));
           }
+          if (typeof saved.betfairCommission === "number") {
+            setBetfairCommission(Math.min(100, Math.max(0, saved.betfairCommission)));
+          }
         }
       } catch {
         // A malformed stored setup falls back to the defaults.
@@ -194,9 +198,9 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     if (!hydrated) return;
     window.localStorage.setItem(
       CURRENT_STRATEGY_KEY,
-      JSON.stringify({ market, leagues: selectedLeagues, seasons: selectedSeasons, filterGroups, minBets }),
+      JSON.stringify({ market, leagues: selectedLeagues, seasons: selectedSeasons, filterGroups, minBets, betfairCommission }),
     );
-  }, [filterGroups, hydrated, market, minBets, selectedLeagues, selectedSeasons]);
+  }, [betfairCommission, filterGroups, hydrated, market, minBets, selectedLeagues, selectedSeasons]);
 
   // Load the match index once; the whole backtest runs in the browser so the
   // deployed site needs nothing but static files.
@@ -207,7 +211,8 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
       setError(null);
       try {
         const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-        const response = await fetch(`${base}/backtest-index.json`, { signal: controller.signal });
+        const version = encodeURIComponent(meta.generatedAt);
+        const response = await fetch(`${base}/backtest-index.json?v=${version}`, { signal: controller.signal });
         if (!response.ok) throw new Error("The match index could not be loaded.");
         setIndex((await response.json()) as BacktestIndex);
       } catch (requestError) {
@@ -231,6 +236,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
         seasons: selectedSeasons,
         filterGroups: filterGroups.filter((group) => group.length > 0),
         minBets,
+        betfairCommission,
       };
       try {
         setResult(runBacktest(index, query));
@@ -242,7 +248,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     }, 120);
 
     return () => window.clearTimeout(timer);
-  }, [filterGroups, index, market, minBets, retryToken, selectedLeagues, selectedSeasons]);
+  }, [betfairCommission, filterGroups, index, market, minBets, retryToken, selectedLeagues, selectedSeasons]);
 
   const filteredCategories = useMemo(() => {
     const search = filterSearch.trim().toLocaleLowerCase();
@@ -296,18 +302,6 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     setOrTargetGroup(null);
   }
 
-  function toggleRequiredSelection(
-    value: string,
-    current: string[],
-    update: (next: string[]) => void,
-  ) {
-    if (current.includes(value)) {
-      if (current.length > 1) update(current.filter((item) => item !== value));
-    } else {
-      update([...current, value]);
-    }
-  }
-
   function resetStrategy() {
     setMarket("over25");
     setSelectedLeagues(allLeagues);
@@ -315,6 +309,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     setFilterGroups([]);
     setOrTargetGroup(null);
     setMinBets(100);
+    setBetfairCommission(5);
     setFilterSearch("");
     setOpenCategories([]);
   }
@@ -331,6 +326,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
       seasons: selectedSeasons,
       filterGroups: filterGroups.filter((group) => group.length > 0),
       minBets,
+      betfairCommission,
     };
     const next = [strategy, ...savedStrategies].slice(0, 30);
     setSavedStrategies(next);
@@ -347,6 +343,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     setFilterGroups(sanitizeGroups(strategy.filterGroups, validFilterIds, meta.maxFilters));
     setOrTargetGroup(null);
     setMinBets(strategy.minBets);
+    setBetfairCommission(strategy.betfairCommission ?? 5);
     setStrategiesDialogOpen(false);
   }
 
@@ -360,7 +357,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
     return strategy.filterGroups.reduce((count, group) => count + group.length, 0);
   }
 
-  const generatedDate = shortDate.format(new Date(meta.generatedAt));
+  const cutoffDate = shortDate.format(new Date(`${meta.cutoffDate}T12:00:00`));
 
   return (
     <div className="min-h-screen">
@@ -397,7 +394,7 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden text-xs text-muted-foreground xl:inline">Updated {generatedDate}</span>
+            <span className="text-xs text-muted-foreground">Match cutoff {cutoffDate}</span>
             <Button onClick={resetStrategy} variant="ghost" size="sm" className="text-muted-foreground">
               <RotateCcw data-icon="inline-start" /> Reset setup
             </Button>
@@ -421,40 +418,8 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                 </div>
 
                 <div className="space-y-3 p-5 sm:border-t-0 sm:border-l lg:border-l-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">02 <span className="ml-1.5 text-foreground" id="leagues-label">Leagues</span></span>
-                    {selectedLeagues.length < allLeagues.length ? (
-                      <Button
-                        className="h-auto px-1.5 py-0.5 text-[11px]"
-                        onClick={() => setSelectedLeagues(allLeagues)}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        Select all
-                      </Button>
-                    ) : (
-                      <span className="text-[11px] text-muted-foreground">All five selected</span>
-                    )}
-                  </div>
-                  <div role="group" aria-labelledby="leagues-label" className="flex flex-wrap gap-1.5">
-                    {allLeagues.map((league) => {
-                      const selected = selectedLeagues.includes(league);
-                      return (
-                        <Button
-                          aria-pressed={selected}
-                          className={cn("h-9 gap-1.5 rounded-lg border-transparent bg-secondary/60 px-2.5 text-xs text-muted-foreground hover:bg-secondary", selected && "border-primary/20 bg-primary/8 text-foreground")}
-                          key={league}
-                          onClick={() =>
-                            toggleRequiredSelection(league, selectedLeagues, setSelectedLeagues)
-                          }
-                          size="sm"
-                          variant="outline"
-                        >
-                          {selected && <Check className="size-3 text-primary" />} {league}
-                        </Button>
-                      );
-                    })}
-                  </div>
+                  <span className="text-xs text-muted-foreground">02 <span className="ml-1.5 text-foreground">Competitions</span></span>
+                  <CompetitionSelector competitions={meta.competitions} market={market} onChange={setSelectedLeagues} selected={selectedLeagues} />
                 </div>
 
                 <div className="space-y-3 p-5 sm:col-span-2 lg:col-span-1">
@@ -462,35 +427,15 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                     <span className="text-xs text-muted-foreground">03 <span className="ml-1.5 text-foreground" id="seasons-label">Seasons</span></span>
                     <span className="text-[11px] text-muted-foreground">Current season is opt-in</span>
                   </div>
-                  <div role="group" aria-labelledby="seasons-label" className="flex flex-wrap gap-1.5">
-                    {meta.availableSeasons.map((season) => {
-                      const selected = selectedSeasons.includes(season);
-                      const current = season === meta.currentSeason;
-                      return (
-                        <Button
-                          aria-pressed={selected}
-                          className={cn("h-9 gap-1.5 rounded-lg border-transparent bg-secondary/60 px-2.5 text-xs text-muted-foreground hover:bg-secondary", selected && "border-primary/20 bg-primary/8 text-foreground")}
-                          key={season}
-                          onClick={() =>
-                            toggleRequiredSelection(season, selectedSeasons, setSelectedSeasons)
-                          }
-                          size="sm"
-                          variant="outline"
-                        >
-                          {selected && <Check className="size-3 text-primary" />}
-                          {season.replace("20", "").replace("-20", "/")}
-                          {current && <span className="size-1.5 rounded-full bg-primary" aria-label="Current season" />}
-                        </Button>
-                      );
-                    })}
-                  </div>
+                  <SeasonSelector meta={meta} onChange={setSelectedSeasons} selected={selectedSeasons} />
                 </div>
 
           </div>
           <div className="flex flex-wrap items-start justify-between gap-3 border-t border-border/70 px-5 py-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[11px] text-muted-foreground">
               <span className="flex items-center gap-2"><Database className="size-3.5" /> {meta.matchCount.toLocaleString()} matches available</span>
-              <span>Maximum closing odds</span>
+              <span>{meta.competitions.length} competitions</span>
+              <span>Max bookmaker · Betfair fallback</span>
               <span>1u flat stake</span>
             </div>
             <details className="group w-full text-xs sm:w-auto sm:max-w-xs">
@@ -510,6 +455,9 @@ export function StrategyDashboard({ filters, meta }: StrategyDashboardProps) {
                   <p className="text-[11px] leading-4 text-muted-foreground">
                     Results below this number of settled bets receive a small-sample flag.
                   </p>
+                  <Label className="mt-4 text-xs" htmlFor="betfair-commission">Betfair commission assumption (%)</Label>
+                  <Input id="betfair-commission" max={100} min={0} onChange={(event) => setBetfairCommission(Math.min(100, Math.max(0, Number(event.target.value) || 0)))} step={0.1} type="number" value={betfairCommission} />
+                  <p className="text-[11px] leading-4 text-muted-foreground">Applied only to winning exchange profit, not bookmaker bets. The 5% starting assumption is editable; use the rate applicable to your account.</p>
               </div>
             </details>
           </div>

@@ -1,0 +1,42 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const ts = require('typescript');
+const source = fs.readFileSync(path.join(__dirname, '../src/lib/backtest-engine.ts'), 'utf8');
+const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+const exported = {};
+new Function('exports', compiled)(exported);
+const { runBacktest } = exported;
+const row = (id, hits, odds = 3, type = 'bookmaker') => ({ id, league: 'Test', leagueCode: 'T', season: '2026-2027', date: '2026-10-01', home: 'Home', away: 'Away', homeGoals: 2, awayGoals: 1, result: 'H', odds: { home: odds }, oddsTypes: { home: type }, filterHits: hits, jsonAvailable: true });
+const index = { meta: { schemaVersion: 2 }, filters: [{id: 'a'}, {id: 'b'}], matches: [row('one',[0]), row('two',[1]), row('both',[0,1]), row('missing',[0,1],null), row('exchange',[0],3,'betfair')] };
+const query = { market: 'home', leagues: ['Test'], seasons: ['2026-2027'], filterGroups: [['a'],['b']], minBets: 10, betfairCommission: 5 };
+assert.equal(runBacktest(index, query).metrics.bets, 1);
+assert.equal(runBacktest(index, query).missingOdds, 1);
+const or = runBacktest(index, {...query, filterGroups:[['a','b']]});
+assert.equal(or.metrics.bets,4);
+assert.equal(or.betfairBets,1);
+assert.equal(or.matches.find(m => m.id === 'exchange').profit,1.9);
+assert.equal(runBacktest(index,{...query, filterGroups:[['a']],betfairCommission:0}).metrics.profit,6);
+const legacy = {...index, meta: {}, matches:index.matches.map(m=>({...m, filterHits:m.filterHits.map(i=>index.filters[i].id)}))};
+assert.deepEqual(runBacktest(legacy,query).metrics,runBacktest(index,query).metrics);
+const real = JSON.parse(fs.readFileSync(path.join(__dirname,'../data/backtest-index.json'),'utf8'));
+assert.equal(real.meta.competitions.length,33);
+assert.equal(real.meta.filterCount,125);
+assert.ok(real.matches.some(m => m.date === '2026-10-01'));
+assert.ok(real.matches.every(m => m.date <= '2026-10-01'));
+assert.equal(new Set(real.matches.map(m=>m.id)).size,real.matches.length);
+assert.equal(new Set(real.matches.map(m=>[m.leagueCode,m.date,m.home,m.away].join('|'))).size,real.matches.length);
+assert.equal(real.matches.filter(m=>m.leagueCode==='E0').length,1570);
+for(const match of real.matches) {
+  assert.ok(match.filterHits.every(hit=>Number.isInteger(hit)&&hit>=0&&hit<real.filters.length));
+  for(const [market,type] of Object.entries(match.oddsTypes)) {
+    if(type==='betfair') assert.ok(match.betfairMinutes[market]>=-10&&match.betfairMinutes[market]<0);
+  }
+}
+for(const code of ['UCL','UEL','UECL']) assert.ok(real.matches.some(m=>m.leagueCode === code));
+const started=performance.now();
+const all=runBacktest(real,{...query,leagues:Object.keys(real.meta.leagueCounts),seasons:real.meta.availableSeasons,filterGroups:[]});
+assert.ok(all.metrics.bets>0);
+assert.ok(all.matches.every(m=>m.date<='2026-10-01'));
+assert.equal(all.metrics.bets+all.missingOdds,real.matches.length);
+console.log(JSON.stringify({status:'passed',matches:real.matches.length,homeBets:all.metrics.bets,betfairBets:all.betfairBets,backtestMs:Math.round(performance.now()-started)}));

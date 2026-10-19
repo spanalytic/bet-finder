@@ -19,6 +19,8 @@
 
 # generated copy of data/backtest-index.json (created by npm run copy-index)
 /public/backtest-index.json
+/data/sources/
+__pycache__/
 
 # production
 /build

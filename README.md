@@ -6,11 +6,12 @@ Live website: [Bet Finder](https://spanalytic.github.io/bet-finder/).
 
 ## Included in the first draft
 
-- Top-five leagues: EPL, Bundesliga, Ligue 1, La Liga and Serie A.
+- All 30 domestic leagues with CSV or event coverage, plus Champions League, Europa League and Conference League.
+- All available history, with an inclusive match-date cutoff of 1 October 2026. Coverage is shown by competition and market; this is not a guarantee of complete records for every competition.
 - 125 fixed filters across 16 categories.
 - Filters combine with AND by default, with a five-filter cap. Use Add OR on a group to add one alternative; subsequent selections return to AND. Saved strategies retain their existing group rules.
 - Home, draw, away, Over 2.5 and Under 2.5 markets.
-- Maximum closing odds, one-unit flat staking and no commission.
+- Maximum closing bookmaker odds preferred (opening maximum fallback). Missing markets can use the last recorded Betfair price strictly before kickoff, no more than 10 minutes old. Price sources are labelled; exchange commission starts at an editable 5% assumption, applied only to winning exchange profit. One-unit flat staking.
 - ROI, profit, strike rate, average odds, maximum drawdown and 95% confidence intervals.
 - Season and league breakdowns, cumulative profit curve and recent qualifying matches.
 - Browser-local named strategy saving.
@@ -37,7 +38,8 @@ The build writes static files to `out/`; GitHub Pages serves these files for the
 ## Rebuild the data weekly
 
 ```powershell
-C:\Users\thoma\PyCharmMiscProject\.venv\Scripts\python.exe pipeline\build_index.py
+C:\Users\thoma\PyCharmMiscProject\.venv\Scripts\python.exe pipeline\refresh_odds.py
+C:\Users\thoma\PyCharmMiscProject\.venv\Scripts\python.exe pipeline\build_index.py --through 2026-10-01
 ```
 
 The website reads `data/backtest-index.json` and does not access `PyCharmMiscProject` at runtime. See `pipeline/README.md` for the current migration boundary. After rebuilding, commit the updated `data/backtest-index.json` and push to redeploy the live site.
@@ -49,7 +51,9 @@ The site is a fully static export (`output: "export"`): the browser downloads `b
 ## Verification
 
 ```powershell
-npm run lint
+npx eslint src
+C:\Users\thoma\PyCharmMiscProject\.venv\Scripts\python.exe -m unittest discover -s pipeline -p test_pipeline.py
+node pipeline/test_backtest.cjs
 npm run build
 ```
 
@@ -57,6 +61,8 @@ npm run build
 
 - Historical performance is not a prediction or guarantee.
 - Maximum closing odds can overstate prices a bettor could consistently obtain.
+- Betfair fallback records may be sparse. The editable commission assumption is not a claim about the rate for a particular account; spreads, slippage, liquidity and market netting are not modelled.
+- Missing event data and short rolling history do not mean a filter is false in the real world; they mean it cannot be confirmed by this index. Odds-only leagues do not support event-dependent filters.
 - Trying many filters increases the likelihood of finding an apparently profitable result by chance.
 - Confidence intervals describe sampling uncertainty but do not solve strategy-selection bias.
 - Data redistribution and source licensing must be confirmed before public deployment.

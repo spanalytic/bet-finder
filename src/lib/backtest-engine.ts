@@ -93,7 +93,9 @@ function breakdown(rows: ResultMatch[], key: "league" | "season"): BreakdownRow[
   const groups = new Map<string, ResultMatch[]>();
   for (const row of rows) {
     const label = row[key];
-    groups.set(label, [...(groups.get(label) ?? []), row]);
+    const group = groups.get(label);
+    if (group) group.push(row);
+    else groups.set(label, [row]);
   }
   return Array.from(groups, ([label, group]) => {
     const summary = summarise(group);
@@ -133,6 +135,10 @@ export function runBacktest(
   const selectedLeagues = new Set(query.leagues);
   const selectedSeasons = new Set(query.seasons);
   const filtersById = new Map(index.filters.map((filter) => [filter.id, filter]));
+  const ordinals = new Map(index.filters.map((filter, ordinal) => [filter.id, ordinal]));
+  const encodedGroups = groups.map((group) => group.map((id) =>
+    index.meta.schemaVersion === 2 ? (ordinals.get(id) ?? -1) : id,
+  ));
 
   const pool = index.matches.filter(
     (match) =>
@@ -140,7 +146,7 @@ export function runBacktest(
   );
   const qualifying = groups.length
     ? pool.filter((match) =>
-        groups.every((group) =>
+        encodedGroups.every((group) =>
           group.some((filter) => match.filterHits.includes(filter)),
         ),
       )
@@ -148,6 +154,8 @@ export function runBacktest(
 
   const resultRows: ResultMatch[] = [];
   let missingOdds = 0;
+  let betfairBets = 0;
+  const commission = Math.min(100, Math.max(0, query.betfairCommission ?? 5)) / 100;
   for (const match of qualifying) {
     const odds = match.odds[query.market];
     if (!odds || odds <= 1) {
@@ -155,6 +163,8 @@ export function runBacktest(
       continue;
     }
     const won = marketWon(match, query.market);
+    const oddsType = match.oddsTypes?.[query.market] ?? "bookmaker";
+    if (oddsType === "betfair") betfairBets += 1;
     resultRows.push({
       id: match.id,
       league: match.league,
@@ -165,10 +175,12 @@ export function runBacktest(
       score: `${match.homeGoals}–${match.awayGoals}`,
       odds,
       won,
-      profit: round(won ? odds - 1 : -1),
-      matchedFilters: match.filterHits.filter((filter) =>
-        selectedFilters.has(filter),
-      ),
+      profit: round(won ? (odds - 1) * (oddsType === "betfair" ? 1 - commission : 1) : -1, 6),
+      oddsType,
+      priceMinute: match.betfairMinutes?.[query.market],
+      matchedFilters: match.filterHits
+        .map((filter) => typeof filter === "number" ? index.filters[filter]?.id : filter)
+        .filter((filter): filter is string => !!filter && selectedFilters.has(filter)),
     });
   }
   resultRows.sort((a, b) => a.date.localeCompare(b.date));
@@ -196,6 +208,7 @@ export function runBacktest(
     poolMatches: pool.length,
     qualifyingMatches: qualifying.length,
     missingOdds,
+    betfairBets,
     enrichmentCoverage,
     metrics: summarise(resultRows),
     byLeague: breakdown(resultRows, "league"),

@@ -260,6 +260,12 @@ export function ResultsPanel({ result, loading, error, onRetry }: ResultsPanelPr
           <p>All matches in your selection. Add a filter to test your strategy.</p>
         </div>
       )}
+      {(result.missingOdds > 0 || result.betfairBets > 0) && (
+        <div className="rounded-lg border border-border/70 bg-secondary/35 px-3 py-2 text-[11px] leading-5 text-muted-foreground" role="note">
+          {result.betfairBets > 0 && <p>{result.betfairBets.toLocaleString()} bets use pre-match Betfair fallback, after {result.query.betfairCommission ?? 5}% commission on winning exchange profit. Other prices are maximum bookmaker odds.</p>}
+          {result.missingOdds > 0 && <p>{result.missingOdds.toLocaleString()} qualifying matches have no recorded price for this market and are excluded from returns.</p>}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border/80 bg-card xl:grid-cols-4 [&>div:nth-child(even)]:border-l [&>div:nth-child(n+3)]:border-t xl:[&>div:nth-child(n+2)]:border-l xl:[&>div:nth-child(n+3)]:border-t-0">
         <MetricCard
@@ -351,6 +357,7 @@ export function ResultsPanel({ result, loading, error, onRetry }: ResultsPanelPr
                   <TableHead>Match</TableHead>
                   <TableHead className="text-center">Score</TableHead>
                   <TableHead className="text-right">Odds</TableHead>
+                  <TableHead>Price source</TableHead>
                   <TableHead className="text-right">P/L</TableHead>
                 </TableRow>
               </TableHeader>
@@ -371,6 +378,7 @@ export function ResultsPanel({ result, loading, error, onRetry }: ResultsPanelPr
                     </TableCell>
                     <TableCell className="metric-number text-center">{match.score}</TableCell>
                     <TableCell className="metric-number text-right">{match.odds.toFixed(2)}</TableCell>
+                    <TableCell className="text-[11px] text-muted-foreground">{match.oddsType === "betfair" ? `Betfair · ${match.priceMinute}m` : "Bookmaker max"}</TableCell>
                     <TableCell
                       className={cn(
                         "metric-number text-right",
@@ -411,7 +419,8 @@ export function ResultsPanel({ result, loading, error, onRetry }: ResultsPanelPr
         <div className="mt-3 space-y-1.5 leading-5">
           <p>{totalFilters} selected filter{totalFilters === 1 ? "" : "s"} across {ruleGroups.length} group{ruleGroups.length === 1 ? "" : "s"}. Groups use AND; filters within each group use OR.</p>
           <p>{result.missingOdds.toLocaleString()} qualifying matches excluded for missing market odds.{result.enrichmentCoverage !== null && ` Event-data coverage: ${result.enrichmentCoverage}%.`}</p>
-          <p>Maximum historical closing odds, one-unit stakes and no commission. Available prices may have been lower in practice. Trying many combinations can produce attractive results by chance.</p>
+          <p>One-unit stakes. Maximum closing bookmaker odds preferred, opening maximum fallback if needed. Betfair uses the last recorded price in the 10 minutes strictly before kickoff; {result.query.betfairCommission ?? 5}% commission on winning exchange profit. No in-play or prediction-market odds.</p>
+          <p>Rolling form is specific to the competition and season. Early fixtures remain available but cannot match filters needing missing history. Coverage varies; an absent feature is not a negative signal. Available prices may have been lower in practice. Trying many combinations can produce attractive results by chance.</p>
         </div>
       </details>
     </div>

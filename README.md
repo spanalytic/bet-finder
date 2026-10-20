@@ -52,6 +52,8 @@ The read-only event audit is `pipeline/audit_events.py`. With provider-approved 
 
 Validated downloads are kept in ignored `data/sources/events/<competition>/<season>/`; no source-project files are overwritten. Incomplete responses are logged and never promoted to event coverage. The index builder also reads the alternate local EPL FotMob archive, preferring complete records over incomplete duplicates. Rebuild and deploy after a backfill to update the public site.
 
+The completed October 2026 backfill release contains 36,605 validated unique fixtures across 29 available competitions, up 15,291 from the initial detailed-events-only release. All 120 active filters meet the global 100-priced-match threshold. See [the coverage report](pipeline/BACKFILL_2026-10-01.md) for competition counts and remaining gaps; this is not complete all-fixture coverage.
+
 ## Deployment (GitHub Pages)
 
 The site is a fully static export (`output: "export"`): the browser downloads `backtest-index.json` once and runs every backtest locally, so no server is needed. `.github/workflows/deploy.yml` builds and publishes to GitHub Pages on every push to `main`. In the repository settings, set **Pages → Source → GitHub Actions** once.
@@ -60,7 +62,7 @@ The site is a fully static export (`output: "export"`): the browser downloads `b
 
 ```powershell
 npx eslint src
-C:\Users\thoma\PyCharmMiscProject\.venv\Scripts\python.exe -m unittest discover -s pipeline -p test_pipeline.py
+C:\Users\thoma\PyCharmMiscProject\.venv\Scripts\python.exe -m unittest discover -s pipeline -p 'test_*.py'
 node pipeline/test_backtest.cjs
 npm run build
 ```
